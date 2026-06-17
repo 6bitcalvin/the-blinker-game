@@ -1,0 +1,3885 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { 
+  Plus, 
+  Trash2, 
+  Play, 
+  Volume2, 
+  VolumeX, 
+  RefreshCw, 
+  Award, 
+  AlertTriangle, 
+  Sparkles,
+  Info,
+  ChevronRight,
+  X
+} from 'lucide-react';
+
+// --- Types ---
+interface Player {
+  id: string;
+  name: string;
+  score: number;
+  device: 'cartridge' | 'disposable' | 'muhameds' | 'boutiq';
+  oilLevel: number; // 0.0 to 1.0 (Only for cartridge)
+  batteryLevel: number; // 0.0 to 1.0 (Only for disposable)
+  status: 'IDLE' | 'INHALING' | 'SUCCESS' | 'TAPPED_OUT';
+  isEliminated?: boolean;
+  totalBlinks: number;
+  totalAttempts: number;
+  totalDuration: number;
+  streak: number;
+}
+
+interface Particle {
+  id: number;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  size: number;
+  color: string;
+  rotation: number;
+  vRot: number;
+  opacity: number;
+  symbol: string;
+}
+
+interface TrailParticle {
+  id: number;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  size: number;
+  maxSize: number;
+  opacity: number;
+  color: string;
+  blur: string;
+  life: number;
+  maxLife: number;
+}
+
+// --- 8-Bit Pixel Detailed SVG Icons ---
+const PixelCartridgeIcon = ({ size = 16 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" className="inline-block align-middle pixelated select-none pointer-events-none">
+    {/* Mouthpiece */}
+    <rect x="6" y="0" width="4" height="3" fill="#cbd5e1" />
+    <rect x="7" y="1" width="2" height="2" fill="#94a3b8" />
+    {/* Metal collar */}
+    <rect x="5" y="3" width="6" height="2" fill="#94a3b8" />
+    {/* Glass tube with Gold Oil inside */}
+    <rect x="5" y="5" width="6" height="8" fill="#facc15" />
+    {/* Glass highlight */}
+    <rect x="5" y="5" width="1" height="8" fill="#eab308" />
+    <rect x="10" y="5" width="1" height="8" fill="#ffffff" opacity="0.7" />
+    {/* Air intake tube (center metal post) */}
+    <rect x="7" y="5" width="2" height="8" fill="#94a3b8" />
+    {/* Thread connector (bottom) */}
+    <rect x="6" y="13" width="4" height="2" fill="#475569" />
+    <rect x="7" y="15" width="2" height="1" fill="#334155" />
+  </svg>
+);
+
+const PixelDisposableIcon = ({ size = 16 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" className="inline-block align-middle pixelated select-none pointer-events-none">
+    {/* Mouthpiece */}
+    <rect x="7" y="0" width="2" height="3" fill="#1e1b4b" />
+    {/* Body */}
+    <rect x="4" y="3" width="8" height="11" fill="#06b6d4" rx="1" />
+    {/* Accent stripe */}
+    <rect x="4" y="3" width="2" height="11" fill="#0891b2" />
+    {/* View window / display details */}
+    <rect x="7" y="5" width="3" height="4" fill="#10b981" />
+    <rect x="8" y="6" width="1" height="2" fill="#34d399" />
+    {/* Indicator light */}
+    <rect x="7" y="11" width="2" height="1" fill="#39ff14" />
+    {/* Bottom metal trim */}
+    <rect x="5" y="14" width="6" height="2" fill="#475569" />
+  </svg>
+);
+
+const PixelCrownIcon = ({ size = 16 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" className="inline-block align-middle pixelated select-none pointer-events-none">
+    {/* Tips/Points jewels */}
+    <rect x="2" y="1" width="2" height="2" fill="#d946ef" />
+    <rect x="7" y="0" width="2" height="2" fill="#c084fc" />
+    <rect x="12" y="1" width="2" height="2" fill="#d946ef" />
+
+    {/* Left Peak */}
+    <rect x="1" y="3" width="4" height="3" fill="#7e22ce" />
+    <rect x="2" y="3" width="2" height="2" fill="#a855f7" />
+    
+    {/* Middle Peak */}
+    <rect x="6" y="2" width="4" height="4" fill="#7e22ce" />
+    <rect x="7" y="2" width="2" height="3" fill="#a855f7" />
+
+    {/* Right Peak */}
+    <rect x="11" y="3" width="4" height="3" fill="#7e22ce" />
+    <rect x="12" y="3" width="2" height="2" fill="#a855f7" />
+
+    {/* Center fill connecting body */}
+    <rect x="2" y="6" width="12" height="5" fill="#581c87" />
+    <rect x="3" y="6" width="10" height="4" fill="#7e22ce" />
+    <rect x="4" y="6" width="8" height="3" fill="#a855f7" />
+
+    {/* Darker shadow areas */}
+    <rect x="1" y="5" width="1" height="6" fill="#3b0764" />
+    <rect x="14" y="5" width="1" height="6" fill="#3b0764" />
+    <rect x="2" y="10" width="12" height="1" fill="#3b0764" />
+
+    {/* Bottom gold/jeweled crown band */}
+    <rect x="1" y="11" width="14" height="3" fill="#2e1065" />
+    <rect x="2" y="12" width="12" height="1" fill="#581c87" />
+    
+    {/* Inner jewels on the band */}
+    <rect x="3" y="12" width="2" height="1" fill="#00f3ff" />
+    <rect x="7" y="12" width="2" height="1" fill="#ff007f" />
+    <rect x="11" y="12" width="2" height="1" fill="#39ff14" />
+  </svg>
+);
+
+const PixelMuhaIcon = ({ size = 16 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" className="inline-block align-middle pixelated select-none pointer-events-none">
+    {/* Mouthpiece */}
+    <rect x="6" y="0" width="4" height="2" fill="#18181b" />
+    {/* Body */}
+    <rect x="3" y="1.5" width="10" height="13" fill="#2d2d30" rx="1" />
+    <rect x="4" y="2" width="8" height="12" fill="#1d1d1f" />
+    {/* Golden crest seal logo in center */}
+    <circle cx="8" cy="8.5" r="2.5" fill="#ca8a04" />
+    <rect x="7" y="8" width="2" height="1.5" fill="#facc15" />
+    {/* Left oil tube (gold) */}
+    <rect x="4.5" y="3" width="2" height="10" fill="#facc15" />
+    <rect x="5.5" y="3" width="1" height="10" fill="#ca8a04" />
+    {/* Status light */}
+    <rect x="7" y="13" width="2" height="1.2" fill="#c084fc" />
+    {/* Bottom cap */}
+    <rect x="4" y="14" width="8" height="1.2" fill="#141416" />
+  </svg>
+);
+
+const PixelBoutiqIcon = ({ size = 16 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" className="inline-block align-middle pixelated select-none pointer-events-none">
+    {/* Mouthpiece / upper cap */}
+    <rect x="5" y="0" width="6" height="3.2" fill="#7c3aed" rx="1" />
+    <rect x="7" y="0" width="2" height="3" fill="#5b21b6" />
+    {/* Fatter outer Body (Purple) */}
+    <rect x="3.2" y="3.2" width="9.6" height="11.2" rx="2" fill="#8b5cf6" />
+    {/* Inner Front Screen Face (Black) */}
+    <rect x="4.2" y="5.2" width="7.6" height="7.6" fill="#090412" rx="1" />
+    {/* 3 Gold oil capsules inside screen at the top */}
+    <rect x="5" y="6" width="1.2" height="1.8" fill="#facc15" />
+    <rect x="7.2" y="6" width="1.2" height="1.8" fill="#facc15" />
+    <rect x="9.4" y="6" width="1.2" height="1.8" fill="#facc15" />
+    {/* LED Indicators / tiny screen symbols */}
+    <rect x="5.2" y="9.2" width="2" height="1" fill="#00f3ff" />
+    <rect x="8.8" y="9.2" width="2.2" height="1" fill="#ff007f" />
+    {/* Switch Button at bottom */}
+    <rect x="6" y="11.2" width="4" height="1" fill="#7c3aed" />
+    <rect x="4" y="14" width="8" height="1" fill="#4c1d95" />
+  </svg>
+);
+
+const getDeviceIcon = (device: 'cartridge' | 'disposable' | 'muhameds' | 'boutiq', size = 12) => {
+  switch (device) {
+    case 'cartridge': return <PixelCartridgeIcon size={size} />;
+    case 'disposable': return <PixelDisposableIcon size={size} />;
+    case 'muhameds': return <PixelMuhaIcon size={size} />;
+    case 'boutiq': return <PixelBoutiqIcon size={size} />;
+  }
+};
+
+const getDeviceName = (device: 'cartridge' | 'disposable' | 'muhameds' | 'boutiq') => {
+  switch (device) {
+    case 'cartridge': return 'Cartridge';
+    case 'disposable': return 'Disposable';
+    case 'muhameds': return 'Muha Meds';
+    case 'boutiq': return 'Boutiq Dual-Tank';
+  }
+};
+
+const getDeviceAccentColor = (device: 'cartridge' | 'disposable' | 'muhameds' | 'boutiq') => {
+  switch (device) {
+    case 'cartridge': return '#ff007f';
+    case 'disposable': return '#00f3ff';
+    case 'muhameds': return '#eab308';
+    case 'boutiq': return '#a78bfa';
+  }
+};
+
+// --- Simplified Neutral Feedback Quotes ---
+const FAILURE_QUOTES = [
+  "Inhalation stopped early.",
+  "Did not reach required time.",
+  "Blinker timer not completed.",
+  "Puff was too short."
+];
+
+const SUCCESS_QUOTES = [
+  "Timer completed.",
+  "Target time reached.",
+  "Blinker succeeded.",
+  "Succeeded."
+];
+
+// --- Presets ---
+const PRESET_NAMES = [
+  "LUNG_CHAMPION", "COIL_CRUSHER", "GLITCH_SPIKE", "NEON_LORD",
+  "OXYGEN_ENEMY", "VOLT_VIXEN", "BATTERY_BOSS", "VAPOR_STORM"
+];
+
+// --- Web Audio System ---
+let audioCtx: AudioContext | null = null;
+let activeOsc: OscillatorNode | null = null;
+let activeMod: OscillatorNode | null = null;
+let activeFilter: BiquadFilterNode | null = null;
+let activeGain: GainNode | null = null;
+
+function initAudio() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+  }
+  if (audioCtx.state === 'suspended') {
+    audioCtx.resume();
+  }
+}
+
+function playSynthBeep(freq: number, type: 'sine' | 'square' | 'sawtooth' | 'triangle' = 'sine', duration = 0.1, volume = 0.1) {
+  try {
+    initAudio();
+    if (!audioCtx) return;
+    const osc = audioCtx.createOscillator();
+    const gainNode = audioCtx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+    gainNode.gain.setValueAtTime(volume, audioCtx.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+    osc.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + duration);
+  } catch (e) {
+    console.warn("Audio blocked:", e);
+  }
+}
+
+function playSubtleClickHiss() {
+  try {
+    initAudio();
+    if (!audioCtx) return;
+    const osc = audioCtx.createOscillator();
+    const noiseGain = audioCtx.createGain();
+    
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(55, audioCtx.currentTime);
+    
+    const filter = audioCtx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(320, audioCtx.currentTime);
+    filter.Q.setValueAtTime(4.0, audioCtx.currentTime);
+    
+    noiseGain.gain.setValueAtTime(0.015, audioCtx.currentTime);
+    noiseGain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.03);
+    
+    osc.connect(filter);
+    filter.connect(noiseGain);
+    noiseGain.connect(audioCtx.destination);
+    
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.03);
+  } catch (e) {
+    console.warn("Subtle click/hiss blocked:", e);
+  }
+}
+
+function playLowBatteryBeep() {
+  try {
+    initAudio();
+    if (!audioCtx) return;
+    // Standard low-power warning sequence: two rapid high-pitched distinct beep alerts
+    const osc = audioCtx.createOscillator();
+    const gainNode = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+    gainNode.gain.setValueAtTime(0.12, audioCtx.currentTime);
+    gainNode.gain.setValueAtTime(0.12, audioCtx.currentTime + 0.08);
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.12);
+    osc.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.12);
+
+    setTimeout(() => {
+      try {
+        if (!audioCtx) return;
+        const osc2 = audioCtx.createOscillator();
+        const gainNode2 = audioCtx.createGain();
+        osc2.type = 'sine';
+        osc2.frequency.setValueAtTime(880, audioCtx.currentTime);
+        gainNode2.gain.setValueAtTime(0.12, audioCtx.currentTime);
+        gainNode2.gain.setValueAtTime(0.12, audioCtx.currentTime + 0.08);
+        gainNode2.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.12);
+        osc2.connect(gainNode2);
+        gainNode2.connect(audioCtx.destination);
+        osc2.start();
+        osc2.stop(audioCtx.currentTime + 0.12);
+      } catch (e) {
+        console.warn("Second beep failed:", e);
+      }
+    }, 150);
+  } catch (e) {
+    console.warn("Low battery beep blocked:", e);
+  }
+}
+
+function startInhaleSizzle() {
+  try {
+    initAudio();
+    if (!audioCtx) return;
+    stopInhaleSizzle();
+
+    activeOsc = audioCtx.createOscillator();
+    activeOsc.type = 'triangle';
+    activeOsc.frequency.setValueAtTime(80, audioCtx.currentTime);
+
+    activeMod = audioCtx.createOscillator();
+    activeMod.type = 'sawtooth';
+    activeMod.frequency.setValueAtTime(110, audioCtx.currentTime);
+
+    const modGain = audioCtx.createGain();
+    modGain.gain.setValueAtTime(50, audioCtx.currentTime);
+
+    activeFilter = audioCtx.createBiquadFilter();
+    activeFilter.type = 'bandpass';
+    activeFilter.frequency.setValueAtTime(1500, audioCtx.currentTime);
+    activeFilter.Q.setValueAtTime(4.0, audioCtx.currentTime);
+
+    activeGain = audioCtx.createGain();
+    activeGain.gain.setValueAtTime(0.07, audioCtx.currentTime);
+
+    activeMod.connect(modGain);
+    modGain.connect(activeOsc.frequency);
+    activeOsc.connect(activeFilter);
+    activeFilter.connect(activeGain);
+    activeGain.connect(audioCtx.destination);
+
+    activeOsc.start();
+    activeMod.start();
+  } catch (e) {
+    console.warn("Sound start error:", e);
+  }
+}
+
+function updateInhaleSizzleRate(progress: number) {
+  try {
+    if (audioCtx && activeFilter && activeOsc) {
+      const targetCutoff = 1500 + progress * 1200;
+      activeFilter.frequency.setValueAtTime(targetCutoff, audioCtx.currentTime);
+      const bassFreq = 80 + progress * 60;
+      activeOsc.frequency.setValueAtTime(bassFreq, audioCtx.currentTime);
+    }
+  } catch {}
+}
+
+function stopInhaleSizzle() {
+  try {
+    if (activeOsc) {
+      activeOsc.stop();
+      activeOsc = null;
+    }
+    if (activeMod) {
+      activeMod.stop();
+      activeMod = null;
+    }
+    activeFilter = null;
+    activeGain = null;
+  } catch {}
+}
+
+function playBlinkerSuccessTune() {
+  stopInhaleSizzle();
+  try {
+    initAudio();
+    if (!audioCtx) return;
+    const now = audioCtx.currentTime;
+    const notes = [293.66, 329.63, 392.00, 440.00, 523.25, 659.25, 880.00, 1046.50];
+    notes.forEach((freq, idx) => {
+      const osc = audioCtx!.createOscillator();
+      const gainNode = audioCtx!.createGain();
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(freq, now + idx * 0.06);
+      gainNode.gain.setValueAtTime(0.06, now + idx * 0.06);
+      gainNode.gain.exponentialRampToValueAtTime(0.0001, now + idx * 0.06 + 0.18);
+      osc.connect(gainNode);
+      gainNode.connect(audioCtx!.destination);
+      osc.start(now + idx * 0.06);
+      osc.stop(now + idx * 0.06 + 0.22);
+    });
+  } catch {}
+}
+
+function playBuzzerTune() {
+  stopInhaleSizzle();
+  try {
+    initAudio();
+    if (!audioCtx) return;
+    const now = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator();
+    const gainNode = audioCtx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(160, now);
+    osc.frequency.linearRampToValueAtTime(80, now + 0.5);
+    gainNode.gain.setValueAtTime(0.15, now);
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.55);
+    osc.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+    osc.start(now);
+    osc.stop(now + 0.55);
+  } catch {}
+}
+
+
+
+// --- Celebratory Neon Particle Overlay Component ---
+const CelebrationOverlay = ({ playerName, score, onClose, customScoreText }: { playerName: string; score: number; onClose: () => void; customScoreText?: string }) => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    let animationFrameId: number;
+    let width = (canvas.width = window.innerWidth);
+    let height = (canvas.height = window.innerHeight);
+
+    const handleResize = () => {
+      if (canvas) {
+        width = canvas.width = window.innerWidth;
+        height = canvas.height = window.innerHeight;
+      }
+    };
+    window.addEventListener('resize', handleResize);
+
+    const colors = ['#ff007f', '#00f3ff', '#39ff14', '#ffd700', '#7b2cbf'];
+    const particlesArray: Array<{
+      x: number;
+      y: number;
+      vx: number;
+      vy: number;
+      radius: number;
+      color: string;
+      alpha: number;
+      decay: number;
+    }> = [];
+
+    // Spawn drift particles
+    for (let i = 0; i < 100; i++) {
+      particlesArray.push({
+        x: Math.random() * width,
+        y: Math.random() * height,
+        vx: (Math.random() - 0.5) * 3,
+        vy: (Math.random() - 0.5) * 3 - 1.0,
+        radius: Math.random() * 2 + 1,
+        color: colors[Math.floor(Math.random() * colors.length)],
+        alpha: Math.random() * 0.7 + 0.3,
+        decay: Math.random() * 0.003 + 0.001,
+      });
+    }
+
+    const explode = (cx: number, cy: number) => {
+      for (let i = 0; i < 60; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = Math.random() * 6 + 2;
+        particlesArray.push({
+          x: cx,
+          y: cy,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          radius: Math.random() * 3 + 1,
+          color: colors[Math.floor(Math.random() * colors.length)],
+          alpha: 1.0,
+          decay: Math.random() * 0.015 + 0.01,
+        });
+      }
+    };
+
+    explode(width / 2, height / 2);
+    const t1 = setTimeout(() => explode(width * 0.3, height * 0.4), 600);
+    const t2 = setTimeout(() => explode(width * 0.7, height * 0.4), 1200);
+
+    const animate = () => {
+      ctx.clearRect(0, 0, width, height);
+
+      ctx.fillStyle = 'rgba(7, 2, 14, 0.45)';
+      ctx.fillRect(0, 0, width, height);
+
+      for (let i = 0; i < particlesArray.length; i++) {
+        const p = particlesArray[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += 0.02;
+        p.alpha -= p.decay;
+
+        if (p.alpha <= 0) {
+          if (particlesArray.length < 120 && Math.random() < 0.15) {
+            p.x = Math.random() * width;
+            p.y = height + 10;
+            p.vx = (Math.random() - 0.5) * 1.5;
+            p.vy = -Math.random() * 2 - 1;
+            p.alpha = 1.0;
+          } else {
+            particlesArray.splice(i, 1);
+            i--;
+            continue;
+          }
+        }
+
+        ctx.save();
+        ctx.globalAlpha = p.alpha;
+        ctx.shadowBlur = 8;
+        ctx.shadowColor = p.color;
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      animationFrameId = requestAnimationFrame(animate);
+    };
+
+    animate();
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      clearTimeout(t1);
+      clearTimeout(t2);
+      cancelAnimationFrame(animationFrameId);
+    };
+  }, []);
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center p-4">
+      <canvas ref={canvasRef} className="absolute inset-0 w-full h-full block" />
+      
+      <div className="relative z-10 bg-[#12061c]/95 border-4 border-[#ff007f] p-8 text-center max-w-sm w-full shadow-[0_0_20px_#ff007f]">
+        <div className="mb-4 animate-bounce flex justify-center">
+          <PixelCrownIcon size={64} />
+        </div>
+        <h2 className="font-mono text-xs uppercase tracking-widest text-[#00f3ff] mb-1">
+          Top Player
+        </h2>
+        <h1 className="font-mono text-2xl font-bold text-[#39ff14] mb-3 uppercase tracking-tight">
+          {playerName}
+        </h1>
+        <p className="font-mono text-sm text-slate-300 mb-6">
+          {customScoreText ? customScoreText : `Score: ${score} points`}
+        </p>
+
+        <button
+          onClick={onClose}
+          className="w-full py-3 bg-[#ff007f] text-black font-mono text-xs font-bold border-2 border-black hover:bg-pink-400 active:translate-y-0.5 transition-all shadow-[4px_4px_0_#000]"
+        >
+          Close
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// --- Visual Battery Level Icon Indicator ---
+const BatteryIcon = ({ level }: { level: number }) => {
+  const roundedLevel = Math.round(level * 100);
+  const isCritical = level < 0.1;
+  
+  // Decide color based on percentage
+  let colorClass = "text-[#3aef14] stroke-[#3aef14] fill-[#3aef14]"; 
+  if (isCritical) {
+    colorClass = "text-red-500 stroke-red-500 fill-red-500 animate-pulse bg-red-950/45 px-1 py-0.5 border border-red-500 rounded font-black max-w-fit"; 
+  } else if (level <= 0.2) {
+    colorClass = "text-red-500 stroke-red-500 fill-red-500 shadow-red-500/25"; 
+  } else if (level <= 0.45) {
+    colorClass = "text-orange-500 stroke-orange-500 fill-orange-500"; 
+  } else if (level <= 0.7) {
+    colorClass = "text-yellow-500 stroke-yellow-500 fill-yellow-500"; 
+  }
+
+  return (
+    <div className={`flex items-center gap-1 font-mono text-[10px] ${colorClass} select-none`} title={`Battery: ${roundedLevel}%`}>
+      <svg width="22" height="12" viewBox="0 0 22 12" className={`inline-block flex-shrink-0 ${isCritical ? 'animate-bounce' : ''}`}>
+        {/* Outer casing */}
+        <rect x="0.5" y="1.5" width="16" height="9" rx="1.5" fill="none" className="stroke-current" strokeWidth="1.2" />
+        {/* Terminal tip */}
+        <path d="M18,3.5 L18,8.5" className="stroke-current" strokeWidth="1.2" strokeLinecap="round" />
+        {/* Inner level charge segments */}
+        <rect x="2.5" y="3.5" width={Math.max(1, 12 * level)} height="5" rx="0.5" className="fill-current stroke-none" />
+      </svg>
+      <span>{roundedLevel}%</span>
+    </div>
+  );
+};
+
+// --- Neutral Progress Level Badges ---
+const AvatarBadge = ({ score, status }: { score: number; status: 'IDLE' | 'INHALING' | 'SUCCESS' | 'TAPPED_OUT' }) => {
+  const getLevelConfig = () => {
+    if (score <= 2) {
+      return { 
+        level: 1, 
+        color: "#00f3ff", 
+        bgColor: "rgba(0, 243, 255, 0.15)",
+        svg: (
+          <svg viewBox="0 0 40 40" className="w-full h-full">
+            <rect x="12" y="10" width="16" height="16" rx="2" fill="none" stroke="#00f3ff" strokeWidth="2.5" />
+            <circle cx="20" cy="18" r="3" fill="#00f3ff" />
+            <path d="M14 26 C14 22, 26 22, 26 26" stroke="#00f3ff" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+        )
+      };
+    } else if (score <= 5) {
+      return { 
+        level: 2, 
+        color: "#ffd700", 
+        bgColor: "rgba(255, 215, 0, 0.15)",
+        svg: (
+          <svg viewBox="0 0 40 40" className="w-full h-full animate-pulse">
+            <circle cx="20" cy="20" r="10" fill="none" stroke="#ffd700" strokeWidth="2.5" />
+            <circle cx="16" cy="17" r="1.5" fill="#ffd700" />
+            <circle cx="24" cy="17" r="1.5" fill="#ffd700" />
+            <path d="M15 24 Q20 28, 25 24" stroke="#ffd700" strokeWidth="2" fill="none" strokeLinecap="round" />
+          </svg>
+        )
+      };
+    } else if (score <= 9) {
+      return { 
+        level: 3, 
+        color: "#39ff14", 
+        bgColor: "rgba(57, 255, 20, 0.15)",
+        svg: (
+          <svg viewBox="0 0 40 40" className="w-full h-full">
+            <path d="M10 22 C10 12, 30 12, 30 22 C30 28, 26 31, 20 31 C14 31, 10 28, 10 22 Z" fill="none" stroke="#39ff14" strokeWidth="2.5" />
+            <path d="M14 20 Q16 24, 18 20" stroke="#3c0" strokeWidth="2" fill="none" />
+            <path d="M22 20 Q24 24, 26 20" stroke="#3c0" strokeWidth="2" fill="none" />
+            <ellipse cx="16" cy="18" rx="2" ry="3" fill="#39ff14" />
+            <ellipse cx="24" cy="18" rx="2" ry="3" fill="#39ff14" />
+            <line x1="20" y1="12" x2="20" y2="7" stroke="#39ff14" strokeWidth="2" />
+            <circle cx="20" cy="6" r="1.5" fill="#39ff14" />
+          </svg>
+        )
+      };
+    } else {
+      return { 
+        level: 4, 
+        color: "#ff007f", 
+        bgColor: "rgba(255, 0, 127, 0.2)",
+        svg: (
+          <svg viewBox="0 0 40 40" className="w-full h-full">
+            <path d="M12 18 C12 8, 28 8, 28 18 C28 26, 24 28, 24 32 L16 32 C16 28, 12 26, 12 18 Z" fill="none" stroke="#ff007f" strokeWidth="2.5" />
+            <circle cx="17" cy="18" r="2.5" fill="#ff007f" />
+            <circle cx="23" cy="18" r="2.5" fill="#ff007f" />
+            <path d="M16 25 L24 25" stroke="#ff007f" strokeWidth="2" />
+            <path d="M18 28 L22 28" stroke="#ff007f" strokeWidth="1.5" />
+            <path d="M14 10 L12 6M26 10 L28 6" stroke="#ff007f" strokeWidth="2" strokeLinecap="round" />
+          </svg>
+        )
+      };
+    }
+  };
+
+  const config = getLevelConfig();
+
+  return (
+    <div 
+      className="relative flex items-center justify-center border-2 border-black w-14 h-14 transition-transform duration-300"
+      style={{ 
+        backgroundColor: config.bgColor, 
+        borderColor: '#000',
+        boxShadow: status === 'INHALING' ? `0 0 12px ${config.color}` : 'none'
+      }}
+    >
+      <div className="w-10 h-10">
+        {config.svg}
+      </div>
+      <div 
+        className="absolute -bottom-2 -right-1 font-mono text-[7px] px-1 bg-black text-white border border-[#222]"
+        style={{ color: config.color }}
+      >
+        LVL{config.level}
+      </div>
+    </div>
+  );
+}
+
+// --- Vector Hardware SVG: 510-Thread Cartridge ---
+const CartridgeSVG = ({ 
+  oilLevel, 
+  isPulsing, 
+  voltage, 
+  batteryLevel = 1.0, 
+  isCompleted = false, 
+  progress = 0 
+}: { 
+  oilLevel: number; 
+  isPulsing: boolean; 
+  voltage: number; 
+  batteryLevel?: number; 
+  isCompleted?: boolean; 
+  progress?: number; 
+}) => {
+  const maxLiquidHeight = 116;
+  const liquidHeight = Math.max(0, maxLiquidHeight * oilLevel);
+  const liquidY = 146 - liquidHeight;
+  const breathFactor = 0.5 + 0.5 * Math.sin(progress * Math.PI * 4);
+  
+  const skewValX = isPulsing ? `${(progress * 1.8).toFixed(2)}deg` : '0deg';
+  const skewValY = isPulsing ? `${(progress * 1.0).toFixed(2)}deg` : '0deg';
+  const glowVal = isPulsing ? `${(progress * 10).toFixed(1)}px` : '0px';
+  const animDuration = isPulsing ? `${(0.8 - progress * 0.55).toFixed(2)}s` : '0s';
+
+  return (
+    <svg 
+      width="115" 
+      height="250" 
+      viewBox="0 0 115 250" 
+      className={`mx-auto select-none ${isPulsing ? 'anim-heat-shimmer' : ''}`} 
+      referrerPolicy="no-referrer"
+      style={{
+        '--shimmer-skew-x': skewValX,
+        '--shimmer-skew-y': skewValY,
+        '--shimmer-glow': glowVal,
+        '--shimmer-duration': animDuration,
+      } as React.CSSProperties}
+    >
+      <defs>
+        {/* Carbon Fiber Micro Texture pattern */}
+        <pattern id="carbonPatternCart" width="8" height="8" patternUnits="userSpaceOnUse">
+          <rect width="8" height="8" fill="#110a1d" />
+          <path d="M0,0 L8,8 M8,0 L0,8" stroke="#251341" strokeWidth="1" opacity="0.75" />
+          <path d="M0,4 L8,4 M4,0 L4,8" stroke="#370f3f" strokeWidth="0.5" opacity="0.4" />
+          <circle cx="4" cy="4" r="1.2" fill="#a855f7" opacity="0.3" />
+        </pattern>
+
+        <linearGradient id="oilGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor="#db8e00" />
+          <stop offset="15%" stopColor="#ffd700" />
+          <stop offset="50%" stopColor="#fff8b5" />
+          <stop offset="85%" stopColor="#ffd200" />
+          <stop offset="100%" stopColor="#7a3e00" />
+        </linearGradient>
+
+        <linearGradient id="liquidTopGloss" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#ffffff" stopOpacity="0.8" />
+          <stop offset="40%" stopColor="#ffd700" stopOpacity="0.4" />
+          <stop offset="100%" stopColor="#ffd700" stopOpacity="0.0" />
+        </linearGradient>
+        
+        <linearGradient id="metalGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor="#222b35" />
+          <stop offset="15%" stopColor="#4f5e71" />
+          <stop offset="45%" stopColor="#8c9cb0" />
+          <stop offset="55%" stopColor="#cbd5e1" />
+          <stop offset="85%" stopColor="#4f5e71" />
+          <stop offset="100%" stopColor="#1a2027" />
+        </linearGradient>
+
+        <linearGradient id="goldCapGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor="#632c04" />
+          <stop offset="20%" stopColor="#b45309" />
+          <stop offset="45%" stopColor="#f59e0b" />
+          <stop offset="55%" stopColor="#fef08a" />
+          <stop offset="80%" stopColor="#d97706" />
+          <stop offset="100%" stopColor="#3d1802" />
+        </linearGradient>
+
+        <linearGradient id="batteryBodyGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#080312" />
+          <stop offset="30%" stopColor="#17072a" />
+          <stop offset="70%" stopColor="#300d53" />
+          <stop offset="100%" stopColor="#020004" />
+        </linearGradient>
+
+        <linearGradient id="glassReflection" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor="#ffffff" stopOpacity="0.05" />
+          <stop offset="15%" stopColor="#ffffff" stopOpacity="0.32" />
+          <stop offset="25%" stopColor="#ffffff" stopOpacity="0.08" />
+          <stop offset="75%" stopColor="#ffffff" stopOpacity="0.0" />
+          <stop offset="90%" stopColor="#ffffff" stopOpacity="0.4" />
+          <stop offset="100%" stopColor="#000000" stopOpacity="0.55" />
+        </linearGradient>
+      </defs>
+
+      <style>{`
+        @keyframes led-heartbeat-cart {
+          0%, 100% { opacity: 0.15; }
+          50% { opacity: 0.55; }
+        }
+        .animate-led-heartbeat {
+          animation: led-heartbeat-cart 2.2s infinite ease-in-out;
+        }
+        @keyframes heat-shimmer-anim {
+          0%, 100% {
+            transform: skew(var(--shimmer-skew-x, 0deg), var(--shimmer-skew-y, 0deg)) scale(1);
+            filter: drop-shadow(0 0 var(--shimmer-glow, 0px) rgba(239, 68, 68, 0.45));
+          }
+          50% {
+            transform: skew(calc(-1 * var(--shimmer-skew-x, 0deg)), calc(-1 * var(--shimmer-skew-y, 0deg))) scale(1.02);
+            filter: drop-shadow(0 0 calc(1.6 * var(--shimmer-glow, 0px)) rgba(239, 68, 68, 0.7)) saturate(1.55) contrast(1.2) blur(0.2px);
+          }
+        }
+        .anim-heat-shimmer {
+          animation: heat-shimmer-anim var(--shimmer-duration, 0.8s) infinite ease-in-out;
+          transform-origin: bottom center;
+        }
+        @keyframes bubbles-float {
+          0% { transform: translateY(0px) scale(0.9); opacity: 0.3; }
+          50% { transform: translateY(-7px) scale(1.1); opacity: 0.85; }
+          100% { transform: translateY(-16px) scale(0.85); opacity: 0; }
+        }
+        .anim-bubble-float-fast {
+          animation: bubbles-float 1.1s infinite ease-in-out;
+        }
+        .anim-bubble-float-slow {
+          animation: bubbles-float 2.0s infinite ease-in-out;
+        }
+      `}</style>
+
+      {/* Glossy Mouthpiece with Premium Ceramic Curved details */}
+      <path d="M44,4 C44,0.8 47.5,0.2 57.5,0.2 C67.5,0.2 71,0.8 71,4 L71,24 L44,24 Z" fill="#111113" stroke="#000" strokeWidth="2.5" />
+      {/* Specular mouthpiece light reflections */}
+      <path d="M47,3.5 C47,1.5 50.5,0.8 57.5,0.8" stroke="#ffffff" strokeWidth="1.5" strokeLinecap="round" opacity="0.4" />
+      <path d="M68,5 L68,22" stroke="#ffffff" strokeWidth="0.8" opacity="0.15" />
+      
+      {/* Metallic collar below mouthpiece */}
+      <rect x="38" y="24" width="39" height="5" fill="url(#metalGrad)" stroke="#000" strokeWidth="2" />
+      {/* 510 O-ring spacer */}
+      <rect x="39" y="28" width="37" height="2" fill="#ef4444" opacity="0.8" />
+
+      {/* Cartridge Glass Outer Body with high detail chamfers */}
+      <rect x="35" y="30" width="45" height="120" rx="4" fill="rgba(255,255,255,0.02)" stroke="#000" strokeWidth="2.5" />
+      {/* Inner glass reflection overlay */}
+      <rect x="36" y="31.5" width="43" height="117" rx="3" fill="url(#glassReflection)" pointerEvents="none" />
+      
+      {/* Volumetric marks & fine measurements */}
+      <line x1="36" y1="42" x2="42" y2="42" stroke="#ffffff" strokeWidth="1.2" opacity="0.6" />
+      <text x="45" y="44" fontSize="5.5" fontFamily="monospace" fill="#ffffff" fontWeight="bold" opacity="0.6">1.0ml</text>
+      <line x1="36" y1="70" x2="40" y2="70" stroke="#ffffff" strokeWidth="0.8" opacity="0.4" />
+      <line x1="36" y1="98" x2="42" y2="98" stroke="#ffffff" strokeWidth="1.2" opacity="0.6" />
+      <text x="45" y="100" fontSize="5.5" fontFamily="monospace" fill="#ffffff" fontWeight="bold" opacity="0.6">0.5ml</text>
+      <line x1="36" y1="126" x2="40" y2="126" stroke="#ffffff" strokeWidth="0.8" opacity="0.4" />
+
+      {/* Glass tube side refractions */}
+      <rect x="35.5" y="30.5" width="2" height="119" fill="#fff" opacity="0.2" />
+      <rect x="77.5" y="30.5" width="2" height="119" fill="#000" opacity="0.35" />
+
+      {/* Central Metallic Chimney and Core Pole */}
+      <rect x="53" y="30" width="9" height="120" fill="url(#metalGrad)" stroke="#111" strokeWidth="1.2" />
+      
+      {/* Heating Coil Wire Winding on core base (active pulsing visuals!) */}
+      {isPulsing && (
+        <g opacity={0.35 + 0.65 * breathFactor}>
+          <rect x="52.5" y="125" width="10" height="18" fill="#f97316" opacity="0.35" filter="blur(2px)" />
+          <path d="M53,127 L62,129 M53,131 L62,133 M53,135 L62,137 M53,139 L62,141" stroke="#ff4500" strokeWidth="1.6" className="animate-pulse" />
+          <path d="M53,128 L62,130 M53,132 L62,134 M53,136 L62,138 M53,140 L62,142" stroke="#ffea00" strokeWidth="0.8" className="animate-pulse" />
+        </g>
+      )}
+
+      {/* Base Air Hole intake ports */}
+      <circle cx="55.5" cy="142" r="1.5" fill="#111" stroke="#444" strokeWidth="0.5" />
+      <circle cx="59.5" cy="142" r="1.5" fill="#111" stroke="#444" strokeWidth="0.5" />
+
+      {/* Golden THC/CBD Premium Oil layer */}
+      {liquidHeight > 0 && (
+        <g>
+          {/* Main oil column */}
+          <rect 
+            x="37.5" 
+            y={liquidY} 
+            width="40" 
+            height={liquidHeight} 
+            fill="url(#oilGrad)" 
+            opacity="0.95" 
+            rx="1.5"
+            className="transition-all duration-300 ease-out"
+          />
+          {/* Surface Meniscus Lens Gloss (Top Curve) */}
+          <ellipse 
+            cx="57.5" 
+            cy={liquidY} 
+            rx="20" 
+            ry="3.5" 
+            fill="url(#liquidTopGloss)" 
+            opacity="0.9" 
+            className="transition-all duration-300 ease-out"
+          />
+          {/* Specular high-light curve on meniscus */}
+          <path 
+            d={`M 39,${liquidY - 0.5} Q 57.5,${liquidY + 2} 76,${liquidY - 0.5}`} 
+            fill="none" 
+            stroke="#ffffff" 
+            strokeWidth="1.5" 
+            opacity="0.75"
+            className="transition-all duration-300 ease-out"
+          />
+        </g>
+      )}
+
+      {/* Floating immersive bubbles in oil */}
+      {liquidHeight > 18 && (
+        <g>
+          {/* Static organic bubbles */}
+          <circle cx="47" cy={liquidY + liquidHeight - 14} r="3" fill="#ffffff" opacity="0.5" />
+          <circle cx="47.5" cy={liquidY + liquidHeight - 14.5} r="1.2" fill="#ffd700" opacity="0.9" />
+          
+          <circle cx="68" cy={liquidY + liquidHeight - 25} r="2" fill="#ffffff" opacity="0.45" />
+          <circle cx="43" cy={liquidY + 22} r="1.8" fill="#ffffff" opacity="0.6" />
+          <circle cx="73" cy={liquidY + 38} r="1.5" fill="#ffd700" opacity="0.55" />
+          <circle cx="46" cy={liquidY + (liquidHeight * 0.55)} r="1.2" fill="#ffffff" opacity="0.5" />
+
+          {/* Active vaping bubble stream */}
+          {isPulsing && (
+            <g>
+              <circle cx="45" cy={liquidY + 45} r="2" fill="#ffffff" className="anim-bubble-float-fast" />
+              <circle cx="71" cy={liquidY + 60} r="1.5" fill="#f59e0b" className="anim-bubble-float-slow" />
+              <circle cx="49" cy={liquidY + (liquidHeight * 0.75)} r="1.3" fill="#ffffff" className="anim-bubble-float-fast" />
+              <circle cx="67" cy={liquidY + 30} r="2.3" fill="#ffffff" className="anim-bubble-float-slow" />
+            </g>
+          )}
+        </g>
+      )}
+
+      {/* Base Thread connection collar */}
+      <rect x="35" y="150" width="45" height="14" fill="url(#metalGrad)" stroke="#000" strokeWidth="2.5" />
+      <rect x="42" y="153" width="31" height="3" fill="#111" />
+
+      {/* Gold-plated 510 thread lines */}
+      <rect x="45" y="164" width="25" height="6" fill="url(#goldCapGrad)" stroke="#000" strokeWidth="1.2" />
+      <line x1="45" y1="166" x2="70" y2="166" stroke="#000" strokeWidth="1.2" />
+      <line x1="45" y1="168" x2="70" y2="168" stroke="#000" strokeWidth="1.2" />
+
+      {/* 510 Box Mod Body Base component */}
+      <rect x="20" y="170" width="75" height="74" rx="10" fill="url(#batteryBodyGrad)" stroke="#000" strokeWidth="3" />
+      
+      {/* Solid Aluminum Sides Accent */}
+      <rect x="22" y="176" width="3" height="60" fill="url(#metalGrad)" opacity="0.9" />
+      <rect x="90" y="176" width="3" height="60" fill="url(#metalGrad)" opacity="0.9" />
+      
+      {/* Pattern Grid on center for luxury finish */}
+      <rect x="28" y="175" width="59" height="64" rx="5" fill="url(#carbonPatternCart)" opacity="0.45" pointerEvents="none" />
+      <rect x="28" y="175" width="59" height="64" rx="5" fill="none" stroke="#2c144e" strokeWidth="1.5" opacity="0.6" />
+
+      {/* Micro OLED Dashboard Panel Screen */}
+      <rect x="32" y="178" width="51" height="25" rx="3.5" fill="#000000" stroke={batteryLevel < 0.1 ? "#ef4444" : "#00f3ff"} strokeWidth="1.5" className={batteryLevel < 0.1 ? "animate-pulse" : ""} />
+      
+      {/* Screen Readouts */}
+      <text x="57.5" y="186.5" fontSize="6.8" fontFamily="'Share Tech Mono', monospace" fill={batteryLevel < 0.1 ? "#ef4444" : "#39ff14"} textAnchor="middle" fontWeight="black" className={batteryLevel < 0.1 ? "animate-pulse font-extrabold" : ""}>
+        BAT {Math.round(batteryLevel * 100)}%
+      </text>
+      <text x="57.5" y="198" fontSize="6.8" fontFamily="'Share Tech Mono', monospace" fill="#ffd700" textAnchor="middle" fontWeight="black">
+        PWR {voltage.toFixed(1)}V
+      </text>
+      <text x="78" y="186.5" fontSize="4.2" fontFamily="monospace" fill="#71717a" textAnchor="end">0.8Ω</text>
+
+      {/* Metallic Firing controller button */}
+      <rect x="46" y="206" width="23" height="8" rx="2" fill="url(#metalGrad)" stroke="#000" strokeWidth="1.5" />
+      <circle cx="57.5" cy="210" r="1.8" fill={isPulsing ? "#39ff14" : "#22c55e"} />
+
+      {/* Decorative LED Indicator Halo ring */}
+      <circle 
+        cx="57.5" 
+        cy="210" 
+        r="5" 
+        fill="none" 
+        stroke="#ff007f" 
+        strokeWidth="2" 
+        className={isCompleted ? "animate-blink-rapid" : !isPulsing ? "animate-led-heartbeat" : ""} 
+        style={{
+          transition: "opacity 0.4s ease-in-out, filter 0.4s ease-in-out",
+          opacity: isCompleted ? 1 : isPulsing ? 0.3 + 0.7 * breathFactor : 0.15,
+          filter: isCompleted 
+            ? 'drop-shadow(0 0 12px #ff007f)' 
+            : isPulsing 
+              ? `drop-shadow(0 0 ${4 + breathFactor * 12}px #ff007f)` 
+              : 'drop-shadow(0 0 2px #ff007f)'
+        }}
+      />
+
+      {/* Premium glowing light on bottom base */}
+      <rect x="34" y="238" width="47" height="4.5" rx="1.5" fill="#18181b" stroke="#000" strokeWidth="1.2" />
+      <ellipse 
+        cx="57.5" 
+        cy="237" 
+        rx="16" 
+        ry="3" 
+        fill="#00f3ff" 
+        className={isCompleted ? "animate-blink-rapid" : !isPulsing ? "animate-led-heartbeat" : ""} 
+        style={{ 
+          transition: "opacity 0.4s ease-in-out, filter 0.4s ease-in-out, rx 0.4s ease-in-out",
+          opacity: isCompleted ? 1 : isPulsing ? 0.3 + 0.7 * breathFactor : 0.15,
+          filter: isCompleted 
+            ? 'drop-shadow(0 0 12px #00f3ff)' 
+            : isPulsing 
+              ? `drop-shadow(0 0 ${4 + breathFactor * 12}px #00f3ff)` 
+              : 'drop-shadow(0 0 2px #00f3ff)',
+          rx: isCompleted ? 16 : isPulsing ? Math.max(5, 16 * breathFactor) : 13
+        }} 
+      />
+    </svg>
+  );
+};
+
+// --- Vector Hardware SVG: Disposable Box Vape ---
+const DisposableVapeSVG = ({ 
+  isPulsing, 
+  oilLevel = 1.0, 
+  batteryLevel = 1.0, 
+  voltage, 
+  isCompleted = false, 
+  progress = 0 
+}: { 
+  isPulsing: boolean; 
+  oilLevel?: number; 
+  batteryLevel?: number; 
+  voltage: number; 
+  isCompleted?: boolean; 
+  progress?: number; 
+}) => {
+  const dispoLiquidHeight = Math.max(0, 72 * oilLevel);
+  const dispoLiquidY = 112 - dispoLiquidHeight;
+  const breathFactor = 0.5 + 0.5 * Math.sin(progress * Math.PI * 4);
+  
+  const skewValX = isPulsing ? `${(progress * 1.8).toFixed(2)}deg` : '0deg';
+  const skewValY = isPulsing ? `${(progress * 1.0).toFixed(2)}deg` : '0deg';
+  const glowVal = isPulsing ? `${(progress * 10).toFixed(1)}px` : '0px';
+  const animDuration = isPulsing ? `${(0.8 - progress * 0.55).toFixed(2)}s` : '0s';
+
+  return (
+    <svg 
+      width="115" 
+      height="225" 
+      viewBox="0 0 115 225" 
+      className={`mx-auto select-none ${isPulsing ? 'anim-heat-shimmer' : ''}`} 
+      referrerPolicy="no-referrer"
+      style={{
+        '--shimmer-skew-x': skewValX,
+        '--shimmer-skew-y': skewValY,
+        '--shimmer-glow': glowVal,
+        '--shimmer-duration': animDuration,
+      } as React.CSSProperties}
+    >
+      <defs>
+        {/* Carbon Fiber Micro Texture pattern */}
+        <pattern id="carbonPatternCartDispo" width="6" height="6" patternUnits="userSpaceOnUse">
+          <rect width="6" height="6" fill="#0c0716" />
+          <path d="M0,0 L6,6 M6,0 L0,6" stroke="#23133f" strokeWidth="0.8" opacity="0.65" />
+        </pattern>
+
+        <linearGradient id="bodyGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#1a0b32" />
+          <stop offset="30%" stopColor="#2c1254" />
+          <stop offset="65%" stopColor="#140627" />
+          <stop offset="100%" stopColor="#05010c" />
+        </linearGradient>
+
+        <linearGradient id="battCylinderGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor="#1d1e5d" />
+          <stop offset="25%" stopColor="#312e81" />
+          <stop offset="50%" stopColor="#4338ca" />
+          <stop offset="75%" stopColor="#6366f1" />
+          <stop offset="90%" stopColor="#3730a3" />
+          <stop offset="100%" stopColor="#1b124a" />
+        </linearGradient>
+
+        <linearGradient id="cottonWickGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor="#44403c" />
+          <stop offset="40%" stopColor="#78716c" />
+          <stop offset="60%" stopColor="#a8a29e" />
+          <stop offset="100%" stopColor="#292524" />
+        </linearGradient>
+
+        <linearGradient id="dispoGloss" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#ffffff" stopOpacity="0.15" />
+          <stop offset="30%" stopColor="#ffffff" stopOpacity="0.05" />
+          <stop offset="60%" stopColor="#ffffff" stopOpacity="0.0" />
+          <stop offset="100%" stopColor="#000000" stopOpacity="0.55" />
+        </linearGradient>
+      </defs>
+
+      <style>{`
+        @keyframes led-heartbeat-dispo {
+          0%, 100% { opacity: 0.15; }
+          50% { opacity: 0.45; }
+        }
+        .animate-led-heartbeat-dispo {
+          animation: led-heartbeat-dispo 2.2s infinite ease-in-out;
+        }
+        @keyframes heat-shimmer-anim {
+          0%, 100% {
+            transform: skew(var(--shimmer-skew-x, 0deg), var(--shimmer-skew-y, 0deg)) scale(1);
+            filter: drop-shadow(0 0 var(--shimmer-glow, 0px) rgba(239, 68, 68, 0.4));
+          }
+          50% {
+            transform: skew(calc(-1 * var(--shimmer-skew-x, 0deg)), calc(-1 * var(--shimmer-skew-y, 0deg))) scale(1.015);
+            filter: drop-shadow(0 0 calc(1.5 * var(--shimmer-glow, 0px)) rgba(239, 68, 68, 0.6)) saturate(1.4) contrast(1.15) blur(0.3px);
+          }
+        }
+        .anim-heat-shimmer {
+          animation: heat-shimmer-anim var(--shimmer-duration, 0.8s) infinite ease-in-out;
+          transform-origin: bottom center;
+        }
+      `}</style>
+
+      {/* Ergonomic glossy mouthpiece cap */}
+      <path d="M46,14 L68,14 L64,28 L50,28 Z" fill="#141416" stroke="#000" strokeWidth="2.5" />
+      <path d="M49,16.5 L60,16.5" stroke="#fff" strokeWidth="1" opacity="0.32" strokeLinecap="round" />
+      <rect x="50" y="28" width="14" height="2" fill="#52525b" />
+
+      {/* Main Chassis Box body */}
+      <rect x="24" y="30" width="67" height="146" rx="11" fill="url(#bodyGrad)" stroke="#000" strokeWidth="3" />
+      
+      {/* Translucent premium gloss overlay panel */}
+      <rect x="25.5" y="31.5" width="64" height="143" rx="10" fill="url(#dispoGloss)" pointerEvents="none" />
+
+      {/* Internal Schematic/Hardware detailing */}
+      {/* Internal Li-po battery cylinder cell */}
+      <rect x="30" y="38" width="18" height="74" rx="3.5" fill="url(#battCylinderGrad)" stroke="#000" strokeWidth="1" opacity="0.5" />
+      <text x="39" y="80" fontSize="3.8" fontFamily="monospace" fill="#818cf8" textAnchor="middle" transform="rotate(-90 39 80)" letterSpacing="0.8" opacity="0.75" fontWeight="bold">LI-PO Cell 3.7V</text>
+      <rect x="36" y="35" width="6" height="3" fill="#171717" stroke="#000" strokeWidth="1" opacity="0.5" />
+
+      {/* Cotton atomizing heating element core */}
+      <rect x="52" y="38" width="15" height="74" rx="2" fill="url(#cottonWickGrad)" stroke="#1c1917" strokeWidth="1" opacity="0.6" />
+      {/* Heating core wire mesh wound detailing */}
+      <path d="M52,50 L67,54 M52,57 L67,61 M52,64 L67,68 M52,71 L67,75 M52,78 L67,82 M52,85 L67,89" 
+        stroke={isPulsing ? "#f97316" : "#7c2d12"} 
+        strokeWidth="1.8" 
+        fill="none" 
+        opacity={0.6 + 0.4 * breathFactor} 
+        style={{ filter: isPulsing ? 'drop-shadow(0 0 6px #ea580c)' : 'none' }}
+      />
+      
+      {/* Embedded transparent physical glass oil window */}
+      <rect x="71" y="38" width="13" height="74" rx="2.5" fill="rgba(255,255,255,0.03)" stroke="#111" strokeWidth="1.5" opacity="0.85" />
+      <rect x="72" y="39" width="11" height="72" rx="1.5" fill="url(#dispoGloss)" opacity="0.4" pointerEvents="none" />
+      {/* Measurement guidelines */}
+      <line x1="71" y1="56" x2="74" y2="56" stroke="#ffffff" strokeWidth="0.8" opacity="0.65" />
+      <line x1="71" y1="75" x2="74" y2="75" stroke="#ffffff" strokeWidth="0.8" opacity="0.65" />
+      <line x1="71" y1="94" x2="74" y2="94" stroke="#ffffff" strokeWidth="0.8" opacity="0.65" />
+      
+      {/* Golden active capturing oil levels */}
+      {dispoLiquidHeight > 0 && (
+        <g>
+          {/* Main liquid column */}
+          <rect 
+            x="72" 
+            y={dispoLiquidY} 
+            width="11" 
+            height={dispoLiquidHeight} 
+            fill="url(#oilGrad)" 
+            opacity="0.96" 
+            rx="1"
+            className="transition-all duration-300 ease-out"
+          />
+          {/* Top curve highlight */}
+          <ellipse 
+            cx="77.5" 
+            cy={dispoLiquidY} 
+            rx="5.5" 
+            ry="1.8" 
+            fill="#ffd700" 
+            opacity="0.45" 
+            className="transition-all duration-300 ease-out"
+          />
+        </g>
+      )}
+
+      {/* Floating micro bubbles inside disposable window */}
+      {dispoLiquidHeight > 12 && (
+        <g>
+          <circle cx="76" cy={dispoLiquidY + dispoLiquidHeight - 10} r="1.5" fill="#ffffff" opacity="0.8" />
+          <circle cx="76.5" cy={dispoLiquidY + dispoLiquidHeight - 10.5} r="0.6" fill="#ffd700" opacity="0.95" />
+          <circle cx="79" cy={dispoLiquidY + 16} r="1" fill="#ffffff" opacity="0.7" />
+          <circle cx="74" cy={dispoLiquidY + (dispoLiquidHeight * 0.45)} r="0.8" fill="#ffd700" opacity="0.5" />
+          {isPulsing && (
+            <g>
+              <circle cx="76" cy={dispoLiquidY + 22} r="1.2" fill="#ffffff" className="anim-bubble-float-fast" />
+              <circle cx="79" cy={dispoLiquidY + 34} r="0.9" fill="#ffffff" className="anim-bubble-float-slow" />
+            </g>
+          )}
+        </g>
+      )}
+
+      {/* Printed circuit board (PCB) traces inside */}
+      <g stroke="#ffffff" strokeWidth="0.7" opacity="0.14" fill="none">
+        <path d="M 45,45 L 48,49 L 48,82 L 44,86" />
+        <path d="M 71,36 L 71,64 L 68,68" />
+        <circle cx="45" cy="45" r="1.2" fill="#fff" />
+        <circle cx="71" cy="36" r="1.2" fill="#fff" />
+        <circle cx="68" cy="68" r="1.2" fill="#fff" />
+      </g>
+
+      {/* Mesh carbon grip side plates */}
+      <rect x="25" y="116" width="6" height="48" fill="url(#carbonPatternCartDispo)" opacity="0.8" />
+      <rect x="84" y="116" width="6" height="48" fill="url(#carbonPatternCartDispo)" opacity="0.8" />
+      <line x1="31" y1="116" x2="31" y2="164" stroke="#000" strokeWidth="1" />
+      <line x1="84" y1="116" x2="84" y2="164" stroke="#000" strokeWidth="1" />
+
+      {/* High-visibility active neon accent stripes */}
+      <rect x="24.5" y="48" width="3" height="52" fill="#00f3ff" opacity="0.85" />
+      <rect x="87.5" y="48" width="3" height="52" fill="#ff007f" opacity="0.85" />
+
+      {/* Authentic branding decals */}
+
+      {/* Real-time telemetry dashboard OLED readout screen */}
+      <text x="57.5" y="68" fontSize="7.5" fontFamily="'Share Tech Mono', monospace" fill="#39ff14" textAnchor="middle" fontWeight="bold" letterSpacing="-0.2">{voltage.toFixed(1)} VOLT</text>
+      <text x="57.5" y="78" fontSize="7.5" fontFamily="'Share Tech Mono', monospace" fill={batteryLevel < 0.1 ? "#ef4444" : "#00f3ff"} textAnchor="middle" fontWeight="bold" letterSpacing="-0.2" className={batteryLevel < 0.1 ? "animate-pulse" : ""}>BAT {Math.round(batteryLevel * 100)}%</text>
+      
+      {/* Screen Charge horizontal slider bar indicator */}
+      <rect x="41" y="83" width="33" height="5.5" rx="2.5" fill="#090514" stroke="#444" strokeWidth="1.2" />
+      <rect x="42" y="84" width={Math.max(0, 31 * batteryLevel)} height="3.5" rx="1.5" fill={batteryLevel < 0.1 ? "#ef4444" : batteryLevel > 0.25 ? "#39ff14" : "#ff007f"} className={batteryLevel < 0.1 ? "animate-pulse" : ""} />
+      
+      {/* Internal readout readout */}
+      <rect x="41" y="94" width="33" height="15" rx="3.2" fill="#090514" stroke="#2c1a4e" strokeWidth="1.2" />
+      <text x="57.5" y="104" fontSize="6.5" fontFamily="monospace" fill={isPulsing ? "#ff007f" : "#666"} fontWeight="bold" textAnchor="middle" letterSpacing="0.6">
+        {isPulsing ? "DRAWING" : "STANDBY"}
+      </text>
+
+      {/* Large Glowing Center Breathing LED Ring */}
+      <circle cx="57.5" cy="136" r="9.5" fill="#06020c" stroke="#22133a" strokeWidth="1.8" />
+      <circle 
+        cx="57.5" 
+        cy="136" 
+        r="6.5" 
+        fill="#39ff14" 
+        className={isCompleted ? "animate-blink-rapid" : !isPulsing ? "animate-led-heartbeat-dispo" : ""} 
+        style={{
+          transition: "opacity 0.4s ease-in-out, filter 0.4s ease-in-out, fill 0.4s ease-in-out",
+          opacity: isCompleted ? 1 : isPulsing ? 0.3 + 0.7 * breathFactor : 0.15,
+          filter: isCompleted 
+            ? 'drop-shadow(0 0 12px #39ff14)' 
+            : isPulsing 
+              ? `drop-shadow(0 0 ${4 + breathFactor * 12}px #39ff14)` 
+              : 'drop-shadow(0 0 2px #39ff14)',
+          fill: isCompleted || isPulsing ? "#39ff14" : "#173b11"
+        }}
+      />
+
+      {/* Realistic ventilation slide regulator slots */}
+      <rect x="41" y="172" width="33" height="9" rx="1.5" fill="#18181b" stroke="#000" strokeWidth="2" />
+      <line x1="47" y1="176" x2="47" y2="179" stroke="#cbd5e1" strokeWidth="1.5" strokeLinecap="round" />
+      <line x1="53" y1="176" x2="53" y2="179" stroke="#cbd5e1" strokeWidth="1.5" strokeLinecap="round" />
+      <line x1="59" y1="176" x2="59" y2="179" stroke="#cbd5e1" strokeWidth="1.5" strokeLinecap="round" />
+      <line x1="65" y1="176" x2="65" y2="179" stroke="#cbd5e1" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+};
+
+const MuhaMedsSVG = ({ 
+  isPulsing, 
+  oilLevel = 1.0, 
+  batteryLevel = 1.0, 
+  voltage, 
+  isCompleted = false, 
+  progress = 0 
+}: { 
+  isPulsing: boolean; 
+  oilLevel?: number; 
+  batteryLevel?: number; 
+  voltage: number; 
+  isCompleted?: boolean; 
+  progress?: number; 
+}) => {
+  const muhaLiquidHeight = Math.max(0, 105 * oilLevel);
+  const muhaLiquidY = 143 - muhaLiquidHeight;
+  const breathFactor = 0.5 + 0.5 * Math.sin(progress * Math.PI * 4);
+
+  const skewValX = isPulsing ? `${(progress * 1.8).toFixed(2)}deg` : '0deg';
+  const skewValY = isPulsing ? `${(progress * 1.0).toFixed(2)}deg` : '0deg';
+  const glowVal = isPulsing ? `${(progress * 10).toFixed(1)}px` : '0px';
+  const animDuration = isPulsing ? `${(0.8 - progress * 0.55).toFixed(2)}s` : '0s';
+
+  return (
+    <svg 
+      width="115" 
+      height="225" 
+      viewBox="0 0 115 225" 
+      className={`mx-auto select-none ${isPulsing ? 'anim-heat-shimmer' : ''}`}
+      style={{
+        '--shimmer-skew-x': skewValX,
+        '--shimmer-skew-y': skewValY,
+        '--shimmer-glow': glowVal,
+        '--shimmer-duration': animDuration,
+      } as React.CSSProperties}
+    >
+      <defs>
+        {/* Luxury premium gold metal gradients */}
+        <linearGradient id="postGold" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor="#8a6f27" />
+          <stop offset="20%" stopColor="#ffd700" />
+          <stop offset="40%" stopColor="#fff3b0" />
+          <stop offset="60%" stopColor="#fdf6d2" />
+          <stop offset="80%" stopColor="#ffd700" />
+          <stop offset="100%" stopColor="#5d4c1b" />
+        </linearGradient>
+
+        <linearGradient id="muhaOilGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor="#8c5b00" />
+          <stop offset="15%" stopColor="#ffc700" />
+          <stop offset="50%" stopColor="#fff7b0" />
+          <stop offset="85%" stopColor="#ffb900" />
+          <stop offset="100%" stopColor="#452a00" />
+        </linearGradient>
+
+        <linearGradient id="muhaGloss" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor="#ffffff" stopOpacity="0.3" />
+          <stop offset="25%" stopColor="#ffffff" stopOpacity="0.08" />
+          <stop offset="50%" stopColor="#ffffff" stopOpacity="0.0" />
+          <stop offset="75%" stopColor="#000000" stopOpacity="0.2" />
+          <stop offset="100%" stopColor="#000000" stopOpacity="0.8" />
+        </linearGradient>
+
+        <linearGradient id="muhaBodyGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor="#0a0a0b" />
+          <stop offset="15%" stopColor="#222226" />
+          <stop offset="50%" stopColor="#141416" />
+          <stop offset="85%" stopColor="#1b1b1d" />
+          <stop offset="100%" stopColor="#050506" />
+        </linearGradient>
+
+        {/* Diagonal carbon fiber style shader pattern block */}
+        <pattern id="carbonMesh" width="4" height="4" patternUnits="userSpaceOnUse">
+          <path d="M0 4 L4 0 M0 0 L4 4" stroke="#ffffff" strokeWidth="0.5" opacity="0.04" />
+        </pattern>
+      </defs>
+
+      {/* Styled Mouthpiece matching the skinny black Muha image */}
+      <path d="M42,10 L73,10 L68,28 L47,28 Z" fill="#18181b" stroke="#000" strokeWidth="2.5" />
+      <path d="M44,12.5 L71,12.5" stroke="#fff" strokeWidth="1" opacity="0.3" strokeLinecap="round" />
+      <rect x="47" y="28" width="21" height="4" fill="url(#postGold)" stroke="#000" strokeWidth="1" />
+
+      {/* Main Chassis Box body (skinny black design) */}
+      <rect x="22" y="32" width="71" height="152" rx="10" fill="url(#muhaBodyGrad)" stroke="#000" strokeWidth="3" />
+      <rect x="22" y="32" width="71" height="152" rx="10" fill="url(#carbonMesh)" pointerEvents="none" />
+      
+      {/* 3D Chassis gold bevel lines */}
+      <rect x="24" y="34" width="67" height="148" rx="8" fill="none" stroke="url(#postGold)" strokeWidth="0.8" opacity="0.35" />
+
+      {/* Glossy overlay on main body */}
+      <rect x="23.5" y="33.5" width="68" height="149" rx="8.5" fill="url(#muhaGloss)" pointerEvents="none" opacity="0.9" />
+
+      {/* Golden oil window on left side (skinny, detailed) */}
+      <g>
+        {/* Casing glass frame */}
+        <rect x="27" y="38" width="18" height="107" rx="3.5" fill="rgba(0,0,0,0.7)" stroke="#111" strokeWidth="1.5" />
+        <rect x="28" y="39" width="16" height="105" rx="2.5" fill="rgba(255,215,0,0.02)" />
+
+        {/* Back Grid Scale ticks on Glass Chamber */}
+        <g stroke="url(#postGold)" strokeWidth="0.4" opacity="0.25">
+          <line x1="28" y1="50" x2="31" y2="50" />
+          <line x1="28" y1="65" x2="31" y2="65" />
+          <line x1="28" y1="80" x2="31" y2="80" />
+          <line x1="28" y1="95" x2="31" y2="95" />
+          <line x1="28" y1="110" x2="31" y2="110" />
+          <line x1="28" y1="125" x2="31" y2="125" />
+          <line x1="28" y1="140" x2="31" y2="140" />
+        </g>
+
+        {/* Central Core/Chimney (Gold post with intricate coil ridges) */}
+        <rect x="33.5" y="38" width="5" height="107" fill="url(#postGold)" stroke="#000" strokeWidth="0.5" />
+        <line x1="33.5" y1="48" x2="38.5" y2="48" stroke="#000" strokeWidth="0.4" opacity="0.5" />
+        <line x1="33.5" y1="68" x2="38.5" y2="68" stroke="#000" strokeWidth="0.4" opacity="0.5" />
+        <line x1="33.5" y1="88" x2="38.5" y2="88" stroke="#000" strokeWidth="0.4" opacity="0.5" />
+        <line x1="33.5" y1="108" x2="38.5" y2="108" stroke="#000" strokeWidth="0.4" opacity="0.5" />
+        <line x1="33.5" y1="128" x2="38.5" y2="128" stroke="#000" strokeWidth="0.4" opacity="0.5" />
+
+        <ellipse cx="36" cy="132" rx="4" ry="3" fill="url(#postGold)" stroke="#000" strokeWidth="0.5" />
+        <circle cx="36" cy="132" r="1.3" fill="#fff" opacity="0.9" />
+
+        {/* Dynamic Golden Oil level */}
+        {muhaLiquidHeight > 0 && (
+          <g>
+            <rect 
+              x="28" 
+              y={muhaLiquidY} 
+              width="16" 
+              height={muhaLiquidHeight} 
+              fill="url(#muhaOilGrad)" 
+              opacity="0.96" 
+              rx="1.5"
+            />
+            {/* Liquid surface ellipse with warm glow shine */}
+            <ellipse 
+              cx="36" 
+              cy={muhaLiquidY} 
+              rx="8" 
+              ry="2" 
+              fill="#fff" 
+              opacity="0.65" 
+            />
+            <ellipse 
+              cx="36" 
+              cy={muhaLiquidY + 1.2} 
+              rx="7" 
+              ry="1.2" 
+              fill="#ffe566" 
+              opacity="0.9" 
+            />
+          </g>
+        )}
+
+        {/* Floating micro bubbles in Muha window */}
+        {muhaLiquidHeight > 15 && (
+          <g>
+            <circle cx="33" cy={muhaLiquidY + muhaLiquidHeight - 8} r="1.1" fill="#ffffff" opacity="0.85" />
+            <circle cx="38" cy={muhaLiquidY + 12} r="0.8" fill="#ffffff" opacity="0.75" />
+            <circle cx="31.5" cy={muhaLiquidY + (muhaLiquidHeight * 0.5)} r="1.3" fill="url(#postGold)" opacity="0.8" />
+            <circle cx="41.2" cy={muhaLiquidY + (muhaLiquidHeight * 0.75)} r="0.6" fill="#ffffff" opacity="0.5" />
+            {isPulsing && (
+              <g>
+                <circle cx="33.5" cy={muhaLiquidY + 25} r="0.9" fill="#ffffff" className="anim-bubble-float-fast" />
+                <circle cx="38.5" cy={muhaLiquidY + 45} r="0.6" fill="#ffffff" className="anim-bubble-float-slow" />
+                <circle cx="31" cy={muhaLiquidY + 60} r="0.5" fill="#ffffff" className="anim-bubble-float-fast" />
+              </g>
+            )}
+          </g>
+        )}
+
+        {/* Left window glass reflection specular ribbon */}
+        <rect x="28" y="39" width="3.2" height="105" fill="#ffffff" opacity="0.22" rx="0.5" />
+        <rect x="42" y="39" width="1.2" height="105" fill="#ffffff" opacity="0.1" />
+      </g>
+
+      {/* Right side black body: Detailed Gold Crest "MM" drip logo */}
+      <g>
+        {/* Dripping Gold circular seal frame */}
+        <circle cx="68" cy="72" r="15.5" fill="#18181b" stroke="url(#postGold)" strokeWidth="2.5" />
+        <circle cx="68" cy="72" r="13" fill="none" stroke="url(#postGold)" strokeWidth="0.6" strokeDasharray="1.5,1.5" />
+
+        {/* Crown logo / emblem element inside seal */}
+        <path d="M 61,64.2 Q 64.5,62.2 68,63.7 Q 71.5,62.2 75,64.2 L 76,69.5 L 60,69.5 Z" fill="url(#postGold)" stroke="#000" strokeWidth="0.5" />
+        <circle cx="61" cy="63" r="0.8" fill="url(#postGold)" />
+        <circle cx="68" cy="62" r="0.8" fill="url(#postGold)" />
+        <circle cx="75" cy="63" r="0.8" fill="url(#postGold)" />
+
+        {/* Classic Drippy drip shapes below circle */}
+        <path d="M52.5,74 C52.5,92 83.5,92 83.5,74 Q 68,97 52.5,74 Z" fill="url(#postGold)" opacity="0.95" />
+        <path d="M68,85.5 Q 68.2,96 69.5,98 Q 70.8,96 71,85.5 Z M58.5,81.5 Q 59,89.5 60,91.5 Z M77.5,81.5 Q 77,89.5 76,91.5 Z" fill="url(#postGold)" />
+        
+        {/* Falling golden oil droplets */}
+        <circle cx="69.5" cy="102" r="1.8" fill="url(#postGold)" />
+        <circle cx="60" cy="94.5" r="1.3" fill="url(#postGold)" />
+        <circle cx="76" cy="95.5" r="1.3" fill="url(#postGold)" />
+
+        {/* Inner detailed letters "M" and "M" stylized */}
+        <path d="M59.5,68.5 L63,68.5 L65.5,73.5 L68,68.5 L70.5,73.5 L73,68.5 L76.5,68.5 L74.5,75.5 L71.5,75.5 L68.5,71 L65.5,75.5 L62.5,75.5 Z" fill="#ffffff" />
+        <path d="M60.5,70.5 L63,70.5 L65.5,75 L68,70.5 L70.5,75 L73,70.5 L75.5,70.5 L74,74.5 L71.5,74.5 L68,71 L64.5,74.5 L62,74.5 Z" fill="url(#postGold)" />
+
+        {/* "2019" micro label */}
+        <text x="68" y="80" fontSize="3" fontFamily="monospace" fill="#0d0d0f" textAnchor="middle" fontWeight="bold">2019</text>
+      </g>
+
+      {/* NEW HYPER DETAILED PREMIUM GOLD PLAQUE (Completely Replaces WATERMELON OG) */}
+      <g transform="translate(68, 134)">
+        {/* Plaque Background outer gold border */}
+        <rect x="-24" y="-12" width="48" height="24" rx="4" fill="#0d0d0f" stroke="url(#postGold)" strokeWidth="1.8" />
+        {/* Inner shadow/offset line */}
+        <rect x="-21.5" y="-9.5" width="43" height="19" rx="2.5" fill="#121214" stroke="url(#postGold)" strokeWidth="0.5" opacity="0.4" />
+        
+        {/* Beautiful high detail vector micro crest wreaths */}
+        <path d="M-20,-7 C-19,-10 -15,-9 -17,-6 C-19,-3 -20,-7 -20,-7" stroke="url(#postGold)" strokeWidth="0.8" fill="none" opacity="0.6" />
+        <path d="M20,-7 C19,-10 15,-9 17,-6 C19,-3 20,-7 20,-7" stroke="url(#postGold)" strokeWidth="0.8" fill="none" opacity="0.6" />
+        
+        {/* Micro star elements on layout corner bounds */}
+        <circle cx="-19" cy="6" r="0.8" fill="url(#postGold)" />
+        <circle cx="19" cy="6" r="0.8" fill="url(#postGold)" />
+        <circle cx="-19" cy="-6" r="0.8" fill="url(#postGold)" opacity="0.5" />
+        <circle cx="19" cy="-6" r="0.8" fill="url(#postGold)" opacity="0.5" />
+
+        {/* Luxury premium texts with crisp letterspacing */}
+        <text 
+          x="0" 
+          y="-3" 
+          fontSize="4.8" 
+          fontWeight="900" 
+          fontFamily="'Space Grotesk', sans-serif" 
+          fill="url(#postGold)" 
+          textAnchor="middle" 
+          letterSpacing="0.8"
+        >
+          MUHA MEDS
+        </text>
+        <text 
+          x="0" 
+          y="2.5" 
+          fontSize="3" 
+          fontWeight="700" 
+          fontFamily="monospace" 
+          fill="#fafafa" 
+          textAnchor="middle" 
+          letterSpacing="1.2"
+        >
+          GOLD LABEL
+        </text>
+        <text 
+          x="0" 
+          y="6.8" 
+          fontSize="2.1" 
+          fontWeight="normal" 
+          fontFamily="sans-serif" 
+          fill="url(#postGold)" 
+          textAnchor="middle" 
+          letterSpacing="0.4"
+          opacity="0.85"
+        >
+          CANNABIS EXTRACT
+        </text>
+      </g>
+
+      {/* 2000 MG stamp */}
+      <text x="68" y="157" fontSize="4.2" fontFamily="monospace" fill="#52525b" textAnchor="middle" fontWeight="bold">2000 MG | Dual-Core</text>
+
+      {/* Bottom glowing indicator light */}
+      <g>
+        <rect x="42.5" y="174" width="30" height="7" rx="3.5" fill="#090514" stroke="#000" strokeWidth="1.5" />
+        <rect x="44.5" y="176" width="26" height="3" rx="1.5" fill="#0f0923" />
+        <circle 
+          cx="57.5" 
+          cy="177.5" 
+          r="1.8" 
+          fill="#c084fc" 
+          className={isCompleted ? "animate-blink-rapid" : !isPulsing ? "animate-led-heartbeat-dispo" : ""} 
+          style={{
+            transition: "opacity 0.4s ease-in-out, filter 0.4s ease-in-out, fill 0.4s ease-in-out",
+            opacity: isCompleted ? 1 : isPulsing ? 0.3 + 0.7 * breathFactor : 0.2,
+            filter: isCompleted 
+              ? 'drop-shadow(0 0 10px #c084fc)' 
+              : isPulsing 
+                ? `drop-shadow(0 0 ${3 + breathFactor * 8}px #c084fc)` 
+                : 'drop-shadow(0 0 1px #c084fc)',
+            fill: isCompleted || isPulsing ? "#d946ef" : "#3b0764"
+          }}
+        />
+      </g>
+    </svg>
+  );
+};
+
+const BOUTIQ_THEMES = [
+  {
+    name: 'Teal/Cyan (Maui Wowie)',
+    mouthpiece: '#049e91',
+    chassis: ['#38edf8', '#01ccc0', '#0a9b9a', '#05626a', '#012b30'],
+    accent: '#06ffd4',
+    flavors: [
+      { top: 'MAUI', bot: 'WOWIE' },
+      { top: 'GELATO', bot: '41' },
+      { top: 'MANGO', bot: 'MELON' },
+    ],
+  },
+  {
+    name: 'Orange/Tangerine (Sour Tangie)',
+    mouthpiece: '#ea580c',
+    chassis: ['#fb923c', '#ea580c', '#c2410c', '#9a3412', '#431407'],
+    accent: '#fbbf24',
+    flavors: [
+      { top: 'SOUR', bot: 'TANGIE' },
+      { top: 'NYC', bot: 'SOUR' },
+      { top: 'PASSION', bot: 'FRUIT' },
+    ],
+  },
+  {
+    name: 'Coral Red (Gelato 41)',
+    mouthpiece: '#dc2626',
+    chassis: ['#f87171', '#ef4444', '#dc2626', '#b91c1c', '#7f1d1d'],
+    accent: '#fca5a5',
+    flavors: [
+      { top: 'MAUI', bot: 'WOWIE' },
+      { top: 'GELATO', bot: '41' },
+      { top: 'MANGO', bot: 'MELON' },
+    ],
+  },
+  {
+    name: 'Fuchsia/Pink (Dragon Fruit)',
+    mouthpiece: '#db2777',
+    chassis: ['#f472b6', '#db2777', '#be185d', '#9d174d', '#500724'],
+    accent: '#f472b6',
+    flavors: [
+      { top: 'PINK', bot: 'Z' },
+      { top: 'DRAGON', bot: 'FRUIT' },
+      { top: 'TROPI', bot: 'CANA' },
+    ],
+  },
+  {
+    name: 'Purple/Violet (Grape Ape)',
+    mouthpiece: '#7c3aed',
+    chassis: ['#c084fc', '#a78bfa', '#7c3aed', '#5b21b6', '#311054'],
+    accent: '#c084fc',
+    flavors: [
+      { top: 'GRAPE', bot: 'APE' },
+      { top: 'SKY', bot: 'WALKER' },
+      { top: 'BERRY', bot: 'GUSH' },
+    ],
+  },
+];
+
+const getStringHash = (str: string): number => {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return Math.abs(hash);
+};
+
+const BoutiqSVG = ({ 
+  isPulsing, 
+  oilLevel = 1.0, 
+  batteryLevel = 1.0, 
+  voltage, 
+  isCompleted = false, 
+  progress = 0,
+  playerName = 'DUAL-MIX'
+}: { 
+  isPulsing: boolean; 
+  oilLevel?: number; 
+  batteryLevel?: number; 
+  voltage: number; 
+  isCompleted?: boolean; 
+  progress?: number; 
+  playerName?: string;
+}) => {
+  const breathFactor = 0.5 + 0.5 * Math.sin(progress * Math.PI * 4);
+
+  // Layout calculations for 3 gold capsules (drain level)
+  const capsuleMaxLiquid = 24;
+  const capsuleLiquidHeight = capsuleMaxLiquid * oilLevel;
+  const capsuleLiquidY = 74 - capsuleLiquidHeight;
+
+  const skewValX = isPulsing ? `${(progress * 1.8).toFixed(2)}deg` : '0deg';
+  const skewValY = isPulsing ? `${(progress * 1.0).toFixed(2)}deg` : '0deg';
+  const glowVal = isPulsing ? `${(progress * 10).toFixed(1)}px` : '0px';
+  const animDuration = isPulsing ? `${(0.8 - progress * 0.55).toFixed(2)}s` : '0s';
+
+  // 1 to 3 lightning bolts based on voltage
+  const boltsCount = voltage <= 2.4 ? 1 : voltage <= 3.2 ? 2 : 3;
+
+  // Compute player's specific color theme deterministically
+  const themeIndex = getStringHash(playerName) % BOUTIQ_THEMES.length;
+  const theme = BOUTIQ_THEMES[themeIndex];
+
+  return (
+    <svg 
+      width="120" 
+      height="225" 
+      viewBox="0 0 120 225" 
+      className={`mx-auto select-none ${isPulsing ? 'anim-heat-shimmer' : ''}`}
+      style={{
+        '--shimmer-skew-x': skewValX,
+        '--shimmer-skew-y': skewValY,
+        '--shimmer-glow': glowVal,
+        '--shimmer-duration': animDuration,
+      } as React.CSSProperties}
+    >
+      <defs>
+        {/* Luxury Gold gradient to match the premium branding */}
+        <linearGradient id="postGold" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor="#8a6f27" />
+          <stop offset="20%" stopColor="#ffd700" />
+          <stop offset="40%" stopColor="#fff3b0" />
+          <stop offset="60%" stopColor="#fdf6d2" />
+          <stop offset="80%" stopColor="#ffd700" />
+          <stop offset="100%" stopColor="#5d4c1b" />
+        </linearGradient>
+
+        {/* Dynamic randomized chassis body color gradient */}
+        <linearGradient id="boutiqChassisGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor={theme.chassis[0]} />
+          <stop offset="25%" stopColor={theme.chassis[1]} />
+          <stop offset="55%" stopColor={theme.chassis[2]} />
+          <stop offset="85%" stopColor={theme.chassis[3]} />
+          <stop offset="100%" stopColor={theme.chassis[4]} />
+        </linearGradient>
+
+        <linearGradient id="screenglas" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor="#04020a" />
+          <stop offset="30%" stopColor="#0a0518" />
+          <stop offset="70%" stopColor="#0d0720" />
+          <stop offset="100%" stopColor="#030107" />
+        </linearGradient>
+
+        {/* Breathtaking realistic amber honey-like viscous oil gradient */}
+        <linearGradient id="boutiqOilGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor="#451a03" />
+          <stop offset="15%" stopColor="#d97706" />
+          <stop offset="50%" stopColor="#fbbf24" />
+          <stop offset="80%" stopColor="#f59e0b" />
+          <stop offset="100%" stopColor="#290b00" />
+        </linearGradient>
+
+        {/* 3D Volumetric lighting overhead gradient to lay over glass & oil */}
+        <linearGradient id="capsuleGlassShade" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#ffffff" stopOpacity="0.45" />
+          <stop offset="25%" stopColor="#ffffff" stopOpacity="0.05" />
+          <stop offset="75%" stopColor="#000000" stopOpacity="0.12" />
+          <stop offset="100%" stopColor="#000000" stopOpacity="0.6" />
+        </linearGradient>
+
+        {/* High detail screen matrix scanlines */}
+        <pattern id="screenScanlines" width="4" height="4" patternUnits="userSpaceOnUse">
+          <line x1="0" y1="0" x2="4" y2="0" stroke={theme.accent} strokeWidth="0.5" opacity="0.08" />
+          <line x1="0" y1="0" x2="0" y2="4" stroke={theme.accent} strokeWidth="0.5" opacity="0.04" />
+        </pattern>
+
+        {/* Perfect Capsule Clipping Masks to restrict oil liquid strictly inside the tank bounds */}
+        <clipPath id="capsuleClip1">
+          <rect x="29" y="50" width="16" height="24" rx="8" />
+        </clipPath>
+        <clipPath id="capsuleClip2">
+          <rect x="52" y="50" width="16" height="24" rx="8" />
+        </clipPath>
+        <clipPath id="capsuleClip3">
+          <rect x="75" y="50" width="16" height="24" rx="8" />
+        </clipPath>
+      </defs>
+
+      {/* Stout Dynamic Mouthpiece integrally designed into the curved chassis top */}
+      <path d="M 45,9 Q 60,3 75,9 L 75,32 L 45,32 Z" fill={theme.mouthpiece} stroke="#000" strokeWidth="2.5" />
+      <path d="M 50,13 L 70,13" stroke="#eedbff" strokeWidth="1.2" opacity="0.4" strokeLinecap="round" />
+      <rect x="45" y="28" width="30" height="4" fill="url(#postGold)" stroke="#000" strokeWidth="1" />
+
+      {/* Stout Dynamic main body chassis */}
+      <rect x="15" y="32" width="90" height="155" rx="18" fill="url(#boutiqChassisGrad)" stroke="#000" strokeWidth="3" />
+      
+      {/* 3D Chamfered metallic bezel stroke */}
+      <rect x="17" y="34" width="86" height="151" rx="16" fill="none" stroke="#e9d5ff" strokeWidth="1.2" opacity="0.45" />
+      
+      {/* Sleek corner protective screws */}
+      <circle cx="21" cy="38" r="1.5" fill="#1e1b4b" stroke="#000" strokeWidth="0.5" />
+      <circle cx="99" cy="38" r="1.5" fill="#1e1b4b" stroke="#000" strokeWidth="0.5" />
+      <circle cx="21" cy="181" r="1.5" fill="#1e1b4b" stroke="#000" strokeWidth="0.5" />
+      <circle cx="99" cy="181" r="1.5" fill="#1e1b4b" stroke="#000" strokeWidth="0.5" />
+
+      {/* Front sleek glossy black screen board */}
+      <rect x="22" y="44" width="76" height="135" rx="10" fill="url(#screenglas)" stroke="#000" strokeWidth="2" />
+      <rect x="22" y="44" width="76" height="135" rx="10" fill="url(#screenScanlines)" pointerEvents="none" />
+
+      {/* THREE GLASS CAPSULES: Gold Oil Chambers aligned horizontally */}
+      {/* Chamber 1 */}
+      <g>
+        {/* Container background */}
+        <rect x="29" y="50" width="16" height="24" rx="8" fill="#130822" stroke="url(#postGold)" strokeWidth="0.8" />
+        
+        {/* Clipped Golden Liquid & detail surface */}
+        <g clipPath="url(#capsuleClip1)">
+          {capsuleLiquidHeight > 0 && (
+            <>
+              <rect x="29" y={capsuleLiquidY} width="16" height={capsuleLiquidHeight} fill="url(#boutiqOilGrad)" opacity="0.96" />
+              {/* Curved surface meniscus */}
+              <ellipse cx="37" cy={capsuleLiquidY} rx="8" ry="1.5" fill="#fef08a" opacity="0.8" />
+              <ellipse cx="37" cy={capsuleLiquidY + 0.6} rx="6" ry="1" fill="#ffffff" opacity="0.55" />
+              
+              {/* Dynamic slow floating micro bubbles */}
+              <circle cx="33" cy={capsuleLiquidY + (capsuleLiquidHeight * 0.75)} r="0.6" fill="#ffffff" opacity="0.8" />
+              <circle cx="41" cy={capsuleLiquidY + (capsuleLiquidHeight * 0.3)} r="0.4" fill="#ffffff" opacity="0.7" />
+              <circle cx="36" cy={capsuleLiquidY + (capsuleLiquidHeight * 0.52)} r="0.8" fill="url(#postGold)" opacity="0.85" />
+              {isPulsing && (
+                <circle cx="34" cy={capsuleLiquidY + (capsuleLiquidHeight * 0.45) - (progress * 4)} r="0.5" fill="#ffffff" />
+              )}
+            </>
+          )}
+        </g>
+        
+        {/* Real 3D Glass highlights overhead overlay */}
+        <rect x="29" y="50" width="16" height="24" rx="8" fill="url(#capsuleGlassShade)" pointerEvents="none" opacity="0.85" />
+        <rect x="30.5" y="51.5" width="2" height="21" rx="1" fill="#ffffff" opacity="0.32" pointerEvents="none" />
+        
+        {/* Tick scale metrics */}
+        <line x1="29" y1="56" x2="31" y2="56" stroke="url(#postGold)" strokeWidth="0.5" opacity="0.5" />
+        <line x1="29" y1="62" x2="31" y2="62" stroke="url(#postGold)" strokeWidth="0.5" opacity="0.5" />
+        <line x1="29" y1="68" x2="31" y2="68" stroke="url(#postGold)" strokeWidth="0.5" opacity="0.5" />
+      </g>
+      
+      {/* Chamber 2 */}
+      <g>
+        <rect x="52" y="50" width="16" height="24" rx="8" fill="#130822" stroke="url(#postGold)" strokeWidth="0.8" />
+        
+        <g clipPath="url(#capsuleClip2)">
+          {capsuleLiquidHeight > 0 && (
+            <>
+              <rect x="52" y={capsuleLiquidY} width="16" height={capsuleLiquidHeight} fill="url(#boutiqOilGrad)" opacity="0.96" />
+              <ellipse cx="60" cy={capsuleLiquidY} rx="8" ry="1.5" fill="#fef08a" opacity="0.8" />
+              <ellipse cx="60" cy={capsuleLiquidY + 0.6} rx="6" ry="1" fill="#ffffff" opacity="0.55" />
+              
+              <circle cx="56" cy={capsuleLiquidY + (capsuleLiquidHeight * 0.68)} r="0.6" fill="#ffffff" opacity="0.85" />
+              <circle cx="63" cy={capsuleLiquidY + (capsuleLiquidHeight * 0.45)} r="0.4" fill="#ffffff" opacity="0.75" />
+              <circle cx="59" cy={capsuleLiquidY + (capsuleLiquidHeight * 0.22)} r="0.7" fill="url(#postGold)" opacity="0.9" />
+              {isPulsing && (
+                <circle cx="58" cy={capsuleLiquidY + (capsuleLiquidHeight * 0.55) - (progress * 5)} r="0.5" fill="#ffffff" />
+              )}
+            </>
+          )}
+        </g>
+        
+        <rect x="52" y="50" width="16" height="24" rx="8" fill="url(#capsuleGlassShade)" pointerEvents="none" opacity="0.85" />
+        <rect x="53.5" y="51.5" width="2" height="21" rx="1" fill="#ffffff" opacity="0.32" pointerEvents="none" />
+        
+        <line x1="52" y1="56" x2="54" y2="56" stroke="url(#postGold)" strokeWidth="0.5" opacity="0.5" />
+        <line x1="52" y1="62" x2="54" y2="62" stroke="url(#postGold)" strokeWidth="0.5" opacity="0.5" />
+        <line x1="52" y1="68" x2="54" y2="68" stroke="url(#postGold)" strokeWidth="0.5" opacity="0.5" />
+      </g>
+
+      {/* Chamber 3 */}
+      <g>
+        <rect x="75" y="50" width="16" height="24" rx="8" fill="#130822" stroke="url(#postGold)" strokeWidth="0.8" />
+        
+        <g clipPath="url(#capsuleClip3)">
+          {capsuleLiquidHeight > 0 && (
+            <>
+              <rect x="75" y={capsuleLiquidY} width="16" height={capsuleLiquidHeight} fill="url(#boutiqOilGrad)" opacity="0.96" />
+              <ellipse cx="83" cy={capsuleLiquidY} rx="8" ry="1.5" fill="#fef08a" opacity="0.8" />
+              <ellipse cx="83" cy={capsuleLiquidY + 0.6} rx="6" ry="1" fill="#ffffff" opacity="0.55" />
+              
+              <circle cx="79" cy={capsuleLiquidY + (capsuleLiquidHeight * 0.7)} r="0.6" fill="#ffffff" opacity="0.8" />
+              <circle cx="85" cy={capsuleLiquidY + (capsuleLiquidHeight * 0.35)} r="0.4" fill="#ffffff" opacity="0.7" />
+              <circle cx="81" cy={capsuleLiquidY + (capsuleLiquidHeight * 0.58)} r="0.8" fill="url(#postGold)" opacity="0.85" />
+              {isPulsing && (
+                <circle cx="82" cy={capsuleLiquidY + (capsuleLiquidHeight * 0.4) - (progress * 4)} r="0.5" fill="#ffffff" />
+              )}
+            </>
+          )}
+        </g>
+        
+        <rect x="75" y="50" width="16" height="24" rx="8" fill="url(#capsuleGlassShade)" pointerEvents="none" opacity="0.85" />
+        <rect x="76.5" y="51.5" width="2" height="21" rx="1" fill="#ffffff" opacity="0.32" pointerEvents="none" />
+        
+        <line x1="75" y1="56" x2="77" y2="56" stroke="url(#postGold)" strokeWidth="0.5" opacity="0.5" />
+        <line x1="75" y1="62" x2="77" y2="62" stroke="url(#postGold)" strokeWidth="0.5" opacity="0.5" />
+        <line x1="75" y1="68" x2="77" y2="68" stroke="url(#postGold)" strokeWidth="0.5" opacity="0.5" />
+      </g>
+
+      {/* FLAVORS LIST: Vertical columns or stacked names with red hand pointer indicators */}
+      {/* Column 1 */}
+      <g transform="translate(34, 88)">
+        <text x="0" y="0" fontSize="3.2" fontFamily="'Share Tech Mono', monospace" fill="#ffffff" fontWeight="bold" textAnchor="middle">{theme.flavors[0].top}</text>
+        <text x="0" y="3.5" fontSize="3.2" fontFamily="'Share Tech Mono', monospace" fill="#ffffff" fontWeight="bold" textAnchor="middle">{theme.flavors[0].bot}</text>
+        {/* Pink Selection Finger Hand pointing up */}
+        <path d="M -1.5,10.5 L 0,8 L 1.5,10.5 L 1.5,13.5 L -1.5,13.5 Z M -0.5,11.5 L -0.5,9.5 L 0.5,9.5 L 0.5,11.5 Z" fill="#ff007f" opacity={isPulsing && (voltage <= 2.4) ? 1 : 0.4} />
+      </g>
+
+      {/* Column 2 */}
+      <g transform="translate(60, 88)">
+        <text x="0" y="0" fontSize="3.2" fontFamily="'Share Tech Mono', monospace" fill="#ffffff" fontWeight="bold" textAnchor="middle">{theme.flavors[1].top}</text>
+        <text x="0" y="3.5" fontSize="3.2" fontFamily="'Share Tech Mono', monospace" fill="#ffffff" fontWeight="bold" textAnchor="middle">{theme.flavors[1].bot}</text>
+        {/* Pink Selection Finger Hand pointing up */}
+        <path d="M -1.5,10.5 L 0,8 L 1.5,10.5 L 1.5,13.5 L -1.5,13.5 Z M -0.5,11.5 L -0.5,9.5 L 0.5,9.5 L 0.5,11.5 Z" fill="#ff007f" opacity={!isPulsing || (voltage > 2.4 && voltage < 4.0) ? 1 : 0.4} />
+      </g>
+
+      {/* Column 3 */}
+      <g transform="translate(86, 88)">
+        <text x="0" y="0" fontSize="3.2" fontFamily="'Share Tech Mono', monospace" fill="#ffffff" fontWeight="bold" textAnchor="middle">{theme.flavors[2].top}</text>
+        <text x="0" y="3.5" fontSize="3.2" fontFamily="'Share Tech Mono', monospace" fill="#ffffff" fontWeight="bold" textAnchor="middle">{theme.flavors[2].bot}</text>
+        {/* Pink Selection Finger Hand pointing up */}
+        <path d="M -1.5,10.5 L 0,8 L 1.5,10.5 L 1.5,13.5 L -1.5,13.5 Z M -0.5,11.5 L -0.5,9.5 L 0.5,9.5 L 0.5,11.5 Z" fill="#ff007f" opacity={isPulsing && (voltage >= 4.0) ? 1 : 0.4} />
+      </g>
+
+      {/* Header section separator for digital diagnostics */}
+      <line x1="28" y1="105" x2="92" y2="105" stroke="#1f1635" strokeWidth="0.8" />
+
+      {/* DIAGNOSTICS ROW (BATT % + CHARACTER MASCOT + BLINKERS MATRIX) */}
+      
+      {/* 1. SECURE METRICS: BATT Level + Volts Lightning (Left) */}
+      <g transform="translate(24, 110)">
+        <text x="3" y="5" fontSize="3.5" fontFamily="'Share Tech Mono', monospace" fill="#a78bfa" opacity="0.8">POWER</text>
+        <text x="3" y="11" fontSize="6" fontFamily="'Share Tech Mono', monospace" fill="#00f3ff" fontWeight="bold">
+          {Math.round(batteryLevel * 100)}%
+        </text>
+        
+        {/* Dynamic Voltage status line */}
+        <text x="3" y="18" fontSize="3.5" fontFamily="'Share Tech Mono', monospace" fill="#39ff14" fontWeight="bold">
+          {voltage.toFixed(1)}V
+        </text>
+        <g stroke="#39ff14" strokeWidth="0.8" fill="none" opacity="0.9">
+          {boltsCount >= 1 && <path d="M 19,13 L 23,13 L 21,15 L 24,15 L 20,18" strokeWidth="0.8" />}
+          {boltsCount >= 2 && <path d="M 23,13 L 27,13 L 25,15 L 28,15 L 24,18" strokeWidth="0.8" />}
+        </g>
+      </g>
+
+      {/* 2. Character Mascot Face blowing clouds (Center) */}
+      <g transform="translate(60, 119)" className={isPulsing ? "animate-bounce" : ""}>
+        {/* Little circular green background */}
+        <circle cx="0" cy="4" r="8" fill="#141c10" stroke="#22c55e" strokeWidth="0.8" opacity="0.6" />
+        
+        {/* Pixel style head/hair */}
+        <rect x="-4" y="-3" width="8" height="3" rx="1.5" fill="#22c55e" />
+        <rect x="-6" y="-2" width="2" height="2" fill="#22c55e" />
+        <rect x="4" y="-2" width="2" height="2" fill="#22c55e" />
+        {/* Face */}
+        <rect x="-3.5" y="0" width="7" height="6.5" rx="1" fill="#4ade80" />
+        {/* Angry eyes */}
+        <rect x="-2" y="1.5" width="1.2" height="1" fill="#000" />
+        <rect x="0.8" y="1.5" width="1.2" height="1" fill="#000" />
+        {/* Eye brows */}
+        <path d="M-2.5,1 L-1.5,1.5 M2.5,1 L1.5,1.5" stroke="#15803d" strokeWidth="0.8" />
+        {/* Squashed red glowing puffing nose */}
+        <circle cx="0" cy="3.2" r="1.2" fill="#f87171" className={isPulsing ? "animate-pulse" : ""} />
+        {/* Mouth/Pipe puff details */}
+        <rect x="-1" y="4.5" width="2" height="1" fill="#000" />
+
+        {/* Steaming Clouds rising out of cheeks/ears if pulsing */}
+        {isPulsing && (
+          <g>
+            <path d="M -6,2 Q -12,0 -9,-4 Q -6,-8 -3,-4 Z" fill="#ffffff" opacity="0.65" className="animate-pulse" />
+            <path d="M 6,2 Q 12,0 9,-4 Q 6,-8 3,-4 Z" fill="#ffffff" opacity="0.65" className="animate-pulse" />
+          </g>
+        )}
+      </g>
+
+      {/* 3. BLINKERS status matrix (Right) */}
+      <g transform="translate(85, 110)">
+        <text x="1" y="5" fontSize="3.5" fontFamily="'Share Tech Mono', monospace" fill="#ffd700" fontWeight="bold">BLINKERS</text>
+        {/* Pixel 3x3 LED board */}
+        <g fill={isPulsing ? "#ffd700" : "#241d08"} strokeWidth="0.5" stroke="none">
+          <rect x="2" y="7" width="3.5" height="2.5" className={isPulsing && (breathFactor > 0.3) ? "animate-pulse" : ""} fill={isPulsing && (breathFactor > 0.1) ? "#39ff14" : "#132c10"} />
+          <rect x="7" y="7" width="3.5" height="2.5" className={isPulsing && (breathFactor > 0.5) ? "animate-pulse" : ""} fill={isPulsing && (breathFactor > 0.4) ? "#39ff14" : "#132c10"} />
+          <rect x="12" y="7" width="3.5" height="2.5" className={isPulsing && (breathFactor > 0.7) ? "animate-pulse" : ""} fill={isPulsing && (breathFactor > 0.7) ? "#39ff14" : "#132c10"} />
+          
+          <rect x="2" y="10.5" width="3.5" height="2.5" fill={isPulsing ? "#39ff14" : "#132c10"} />
+          <rect x="7" y="10.5" width="3.5" height="2.5" fill={isCompleted ? "#ffd700" : "#132c10"} />
+          <rect x="12" y="10.5" width="3.5" height="2.5" fill={isPulsing ? "#39ff14" : "#132c10"} />
+          
+          <rect x="2" y="14" width="3.5" height="2.5" fill={isPulsing ? "#39ff14" : "#132c10"} />
+          <rect x="7" y="14" width="3.5" height="2.5" fill={isPulsing ? "#39ff14" : "#132c10"} />
+          <rect x="12" y="14" width="3.5" height="2.5" fill={isPulsing ? "#10b981" : "#132c10"} />
+        </g>
+      </g>
+
+      {/* OSCILLOSCOPE MONITOR: Live Sinewave rendering on draw */}
+      <g transform="translate(26, 138)">
+        <text x="2" y="4" fontSize="3" fontFamily="monospace" fill="#7c3aed" opacity="0.6">CORE TEMP</text>
+        <path 
+          d={isPulsing 
+            ? `M 0,11 Q 12,${11 - breathFactor * 14} 24,${11 + breathFactor * 14} T 48,11 T 66,11` 
+            : `M 0,11 Q 16,${11 - Math.sin(Date.now() / 300) * 2} 32,11 T 66,11`
+          } 
+          fill="none" 
+          stroke={isPulsing ? "#a78bfa" : "#3b1e70"} 
+          strokeWidth="1" 
+          opacity="0.9" 
+        />
+        <text x="48" y="4" fontSize="3.2" fontFamily="monospace" fill="#39ff14" opacity="0.8" className={isPulsing ? "animate-pulse" : ""}>
+          {isPulsing ? "SYS ACTIVE" : "STANDBY"}
+        </text>
+      </g>
+
+      {/* Premium detailed mechanical slider switch at bottom */}
+      <g transform="translate(60, 163)">
+        {/* Slider track */}
+        <rect x="-20" y="-3" width="40" height="6" rx="3" fill="#1e1b4b" stroke="#4338ca" strokeWidth="0.8" />
+        {/* Sliding contact block */}
+        <rect 
+          x={isPulsing ? (breathFactor > 0.5 ? "8" : "-16") : "-4"} 
+          y="-5" 
+          width="8" 
+          height="10" 
+          rx="1.5" 
+          fill="url(#postGold)" 
+          stroke="#000" 
+          strokeWidth="1" 
+        />
+        <text x="0" y="9" fontSize="3" fontFamily="monospace" fill={theme.accent} textAnchor="middle" fontWeight="bold">
+          ACTIVE CORE: {isPulsing ? (breathFactor > 0.55 ? "COMP-B" : "COMP-A") : "DUAL-MIX"}
+        </text>
+      </g>
+
+      {/* Exterior highlights */}
+      <rect x="19.5" y="66" width="2" height="45" fill={theme.accent} opacity="0.85" />
+      <rect x="98.5" y="66" width="2" height="45" fill={theme.accent} opacity="0.85" />
+    </svg>
+  );
+};
+
+interface PersonalBest {
+  maxStreak: number;
+  maxScore: number;
+  totalBlinks: number;
+}
+
+const getPersonalBest = (name: string): PersonalBest => {
+  try {
+    const stored = localStorage.getItem('blinker_personal_bests');
+    if (stored) {
+      const pbMap = JSON.parse(stored);
+      if (pbMap && pbMap[name]) {
+        return {
+          maxStreak: pbMap[name].maxStreak || 0,
+          maxScore: pbMap[name].maxScore || 0,
+          totalBlinks: pbMap[name].totalBlinks || 0
+        };
+      }
+    }
+  } catch {}
+  return { maxStreak: 0, maxScore: 0, totalBlinks: 0 };
+};
+
+const updatePersonalBests = (name: string, currentStreak: number, currentScore: number, addedBlink: boolean) => {
+  try {
+    const stored = localStorage.getItem('blinker_personal_bests');
+    const pbMap: Record<string, PersonalBest> = stored ? JSON.parse(stored) : {};
+    const prev = pbMap[name] || { maxStreak: 0, maxScore: 0, totalBlinks: 0 };
+    pbMap[name] = {
+      maxStreak: Math.max(prev.maxStreak, currentStreak),
+      maxScore: Math.max(prev.maxScore, currentScore),
+      totalBlinks: prev.totalBlinks + (addedBlink ? 1 : 0)
+    };
+    localStorage.setItem('blinker_personal_bests', JSON.stringify(pbMap));
+  } catch {}
+};
+
+export default function App() {
+  const [players, setPlayers] = useState<Player[]>([]);
+  const [activePlayerIdx, setActivePlayerIdx] = useState<number>(0);
+  
+  const activePlayer = players[activePlayerIdx] || players[0] || {
+    id: 'placeholder',
+    name: 'UNTITLED',
+    score: 0,
+    device: 'cartridge',
+    oilLevel: 1.0,
+    batteryLevel: 1.0,
+    status: 'IDLE',
+    totalBlinks: 0,
+    totalAttempts: 0,
+    totalDuration: 0,
+    streak: 0
+  };
+
+  const [gamePhase, setGamePhase] = useState<'LOBBY' | 'GAME_ON' | 'SUMMARY'>('LOBBY');
+  
+  // Forms state
+  const [newPlayerName, setNewPlayerName] = useState<string>('');
+  const [newPlayerDevice, setNewPlayerDevice] = useState<'cartridge' | 'disposable' | 'muhameds' | 'boutiq'>('cartridge');
+
+  // Session state
+  const [gameMode, setGameMode] = useState<'CLASSIC' | 'DRAIN'>('CLASSIC');
+  const [drainGameDuration, setDrainGameDuration] = useState<number>(90); // 60s, 90s, 120s
+  const [drainTimeRemaining, setDrainTimeRemaining] = useState<number>(90);
+  const [blinkMode, setBlinkMode] = useState<'TAKE_BLINKER' | 'DOUBLE_BLINKER'>('TAKE_BLINKER');
+  const [inhaleTimer, setInhaleTimer] = useState<number>(0);
+  const [activeSessionState, setActiveSessionState] = useState<'IDLE' | 'INHALING' | 'SUCCESS' | 'TAPPED_OUT'>('IDLE');
+  const [funnyQuote, setFunnyQuote] = useState<string>('Get ready and tap the button to take a blinker.');
+  const [isMuted, setIsMuted] = useState<boolean>(false);
+  const [inputMode, setInputMode] = useState<'HOLD' | 'TOGGLE'>('TOGGLE');
+  const [isDirectToggled, setIsDirectToggled] = useState<boolean>(false);
+
+  // Overlay state
+  const [showCelebration, setShowCelebration] = useState<boolean>(false);
+  const [isInfoOpen, setIsInfoOpen] = useState<boolean>(false);
+  const [voltage, setVoltage] = useState<number>(3.2); // 2.4V, 3.2V, 4.0V
+
+  // General particles
+  const [particles, setParticles] = useState<Particle[]>([]);
+  const [trailParticles, setTrailParticles] = useState<TrailParticle[]>([]);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const getSmokeParticles = () => {
+    const count = voltage <= 2.4 ? 10 : voltage >= 4.0 ? 28 : 18;
+    const list = [];
+    for (let i = 0; i < count; i++) {
+      const dirs = ['l', 'r', 'c', 's1', 's2'];
+      const dir = dirs[i % dirs.length];
+      const delayVal = i * 0.12;
+      const delay = delayVal.toFixed(2);
+      let baseSize = 14;
+      if (voltage <= 2.4) {
+        baseSize = 12 + (i % 4) * 5;
+      } else if (voltage >= 4.0) {
+        baseSize = 28 + (i % 6) * 10;
+      } else {
+        baseSize = 18 + (i % 4) * 7;
+      }
+      const blur = i % 4 === 0 ? 'blur-md' : i % 4 === 1 ? 'blur-lg' : i % 4 === 2 ? 'blur-sm' : 'blur-xl';
+      const bgClasses = [
+        'bg-white/30',
+        'bg-slate-200/30',
+        'bg-[#00f3ff]/15 shadow-[0_0_12px_rgba(0,243,255,0.25)]',
+        'bg-white/40',
+        'bg-[#ff007f]/15 shadow-[0_0_12px_rgba(255,0,127,0.25)]',
+        'bg-zinc-100/35',
+        'bg-[#39ff14]/15 shadow-[0_0_12px_rgba(57,255,20,0.25)]',
+        'bg-[#d946ef]/15 shadow-[0_0_12px_rgba(217,70,239,0.25)]',
+        'bg-white/25',
+        'bg-slate-300/40'
+      ];
+      const bg = bgClasses[i % bgClasses.length];
+      
+      // Main particle
+      list.push({
+        id: `smoke-${i}`,
+        dir,
+        delay: `${delay}s`,
+        size: `${baseSize}px`,
+        blur,
+        bg
+      });
+
+      // Trailing Ghost Particle - slightly offset (inherits path & opacity slightly faded)
+      const ghostDelay = (delayVal + 0.16).toFixed(2);
+      const ghostSize = Math.max(10, Math.round(baseSize * 0.85));
+      const ghostBg = bg
+        .replace('/40', '/15')
+        .replace('/35', '/12')
+        .replace('/30', '/10')
+        .replace('/25', '/8')
+        .replace('/15', '/5')
+        .replace('0.25', '0.08');
+
+      list.push({
+        id: `smoke-ghost-${i}`,
+        dir, 
+        delay: `${ghostDelay}s`,
+        size: `${ghostSize}px`,
+        blur: 'blur-lg', 
+        bg: ghostBg
+      });
+    }
+    return list;
+  };
+
+  useEffect(() => {
+    const win = window as any;
+    if (win.AudioContext && isMuted && audioCtx) {
+      audioCtx.suspend();
+    } else if (win.AudioContext && !isMuted && audioCtx) {
+      audioCtx.resume();
+    }
+  }, [isMuted]);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+      stopInhaleSizzle();
+    };
+  }, []);
+
+  // Particle drift physics loop
+  useEffect(() => {
+    if (particles.length === 0) return;
+    const interval = setInterval(() => {
+      setParticles((prev) => 
+        prev
+          .map((p) => ({
+            ...p,
+            x: p.x + p.vx,
+            y: p.y + p.vy,
+            vy: p.vy + 0.12,
+            rotation: p.rotation + p.vRot,
+            opacity: p.opacity - 0.02,
+          }))
+          .filter((p) => p.opacity > 0)
+      );
+    }, 18);
+    return () => clearInterval(interval);
+  }, [particles]);
+
+  // Persistent drifting neon cloud trail physics and generator
+  useEffect(() => {
+    let animationFrame: number;
+    let lastSpawnTime = 0;
+    const spawnInterval = 90; // Spawn interval in ms for new draft puffs
+
+    const colors = [
+      'rgba(0, 243, 255, 0.22)',  // Neon cyan
+      'rgba(217, 70, 239, 0.22)', // Neon purple
+      'rgba(57, 255, 20, 0.18)',   // Neon green
+      'rgba(255, 0, 127, 0.22)',  // Neon hot pink
+      'rgba(255, 255, 255, 0.25)', // Smooth ambient white
+    ];
+
+    const updatePhysics = (timestamp: number) => {
+      // Create new faint vapor puffs only when active inhaling session is occurring
+      if (activeSessionState === 'INHALING') {
+        if (!lastSpawnTime) lastSpawnTime = timestamp;
+        if (timestamp - lastSpawnTime > spawnInterval) {
+          lastSpawnTime = timestamp;
+
+          const activeDeviceAccent = getDeviceAccentColor(activePlayer.device);
+          // Insert neon cloud vapor particle with expanding behavior
+          const newTrails: TrailParticle[] = Array.from({ length: 2 }).map((_, idx) => {
+            const size = 14 + Math.random() * 8;
+            return {
+              id: Math.random() + Date.now() + idx,
+              x: (Math.random() - 0.5) * 12,
+              y: 40 + (Math.random() - 0.5) * 6,
+              vx: (Math.random() - 0.5) * 0.7,
+              vy: -1.0 - Math.random() * 1.2,
+              size: size,
+              maxSize: size * (3.0 + Math.random() * 2.0),
+              opacity: 0.4 + Math.random() * 0.15,
+              color: activeDeviceAccent || colors[Math.floor(Math.random() * colors.length)],
+              blur: Math.random() > 0.4 ? 'blur-md' : 'blur-lg',
+              life: 2400 + Math.random() * 800,
+              maxLife: 2400 + Math.random() * 800,
+            };
+          });
+
+          setTrailParticles((prev) => [...prev, ...newTrails]);
+        }
+      } else {
+        lastSpawnTime = 0;
+      }
+
+      // Update positions and sizes of drifting vape trail clouds over time
+      setTrailParticles((prev) => {
+        if (prev.length === 0) return prev;
+        return prev
+          .map((p) => {
+            const nextLife = p.life - 16.7;
+            const ratio = Math.max(0, nextLife / p.maxLife);
+            
+            // Expand size and drift upward
+            const nextSize = p.size + (p.maxSize - p.size) * (1 - ratio) * 0.03;
+            const nextX = p.x + p.vx;
+            const nextY = p.y + p.vy;
+            const nextOpacity = ratio * ratio * 0.45; // Smooth exponential curve for fading out
+
+            return {
+              ...p,
+              x: nextX,
+              y: nextY,
+              vx: p.vx * 0.97, // Drag
+              vy: p.vy * 0.98,
+              size: nextSize,
+              opacity: nextOpacity,
+              life: nextLife,
+            };
+          })
+          .filter((p) => p.life > 0 && p.opacity > 0.01);
+      });
+
+      animationFrame = requestAnimationFrame(updatePhysics);
+    };
+
+    animationFrame = requestAnimationFrame(updatePhysics);
+    return () => cancelAnimationFrame(animationFrame);
+  }, [activeSessionState, activePlayer.device]);
+
+  const targetTime = blinkMode === 'TAKE_BLINKER' ? 8 : 10;
+  const progressRatio = inhaleTimer / targetTime;
+  
+  const isGameOver = 
+    (players.length === 2 && players.some(p => p.status === 'TAPPED_OUT')) ||
+    (players.length >= 3 && players.filter(p => !p.isEliminated).length <= 1);
+
+  const triggerAudioBeep = (freq: number, type: 'sine'|'square'|'sawtooth'|'triangle' = 'sine', duration = 0.1) => {
+    if (!isMuted) playSynthBeep(freq, type, duration, 0.08);
+  };
+
+  const playSoundUiClick = () => {
+    triggerAudioBeep(650, 'sine', 0.04);
+  };
+  
+  const playSoundModeSelect = () => {
+    triggerAudioBeep(440, 'triangle', 0.05);
+    setTimeout(() => {
+      triggerAudioBeep(554, 'triangle', 0.05);
+      setTimeout(() => {
+        triggerAudioBeep(659, 'triangle', 0.08);
+      }, 40);
+    }, 40);
+  };
+
+  const playSoundPlayerAdded = () => {
+    triggerAudioBeep(523, 'sine', 0.06);
+    setTimeout(() => {
+      triggerAudioBeep(659, 'sine', 0.06);
+      setTimeout(() => {
+        triggerAudioBeep(784, 'sine', 0.12);
+      }, 50);
+    }, 50);
+  };
+
+  const playSoundPlayerRemoved = () => {
+    triggerAudioBeep(330, 'square', 0.08);
+    setTimeout(() => {
+      triggerAudioBeep(220, 'square', 0.14);
+    }, 70);
+  };
+
+  const playSoundEliminated = () => {
+    triggerAudioBeep(261, 'sawtooth', 0.12);
+    setTimeout(() => {
+      triggerAudioBeep(196, 'sawtooth', 0.12);
+      setTimeout(() => {
+        triggerAudioBeep(130, 'sawtooth', 0.25);
+      }, 100);
+    }, 100);
+  };
+
+  const handleSpawnConfettiCloud = () => {
+    if (!containerRef.current) return;
+    const parent = containerRef.current.getBoundingClientRect();
+    const px = parent.width / 2;
+    const py = parent.height / 2;
+    const count = 30;
+    const colors = ["#ff007f", "#00f3ff", "#39ff14", "#fafafa", "#ffd700", "#7b2cbf"];
+    
+    const newParticles: Particle[] = [];
+    for (let i = 0; i < count; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 3 + Math.random() * 5;
+      newParticles.push({
+        id: Date.now() + Math.random() * 19280,
+        x: px,
+        y: py,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed - 1.0,
+        size: 8 + Math.random() * 8,
+        color: colors[Math.floor(Math.random() * colors.length)],
+        rotation: Math.random() * 360,
+        vRot: (Math.random() - 0.5) * 10,
+        opacity: 1,
+        symbol: ""
+      });
+    }
+    setParticles((prev) => [...prev, ...newParticles]);
+  };
+
+  // Turn Actions
+  const startInhalation = () => {
+    if (activeSessionState === 'SUCCESS' || activeSessionState === 'TAPPED_OUT') return;
+    
+    triggerAudioBeep(580, 'triangle', 0.08);
+    setActiveSessionState('INHALING');
+    updateGlobalStatus('INHALING');
+    
+    if (!isMuted) startInhaleSizzle();
+
+    if (timerRef.current) clearInterval(timerRef.current);
+    
+    timerRef.current = setInterval(() => {
+      setInhaleTimer((prev) => {
+        const next = Math.min(prev + 0.1, targetTime);
+        const ratio = next / targetTime;
+        
+        updateInhaleSizzleRate(ratio);
+
+        const voltFactor = voltage === 2.4 ? 0.6 : voltage === 4.0 ? 1.6 : 1.0;
+        if (activePlayer.device === 'cartridge' || activePlayer.device === 'muhameds' || activePlayer.device === 'boutiq') {
+          setPlayers(prevPlayers => {
+            let triggeredHaptic = false;
+            let triggeredLowBattery = false;
+            const res = prevPlayers.map((p, idx) => {
+              if (idx === activePlayerIdx) {
+                const nextOil = Math.max(0.01, p.oilLevel - (0.0008 * voltFactor));
+                const isPremiumDispo = p.device === 'muhameds' || p.device === 'boutiq';
+                const battDrainFactor = isPremiumDispo ? 0.001 : 0.0006;
+                const nextBatt = Math.max(0.01, (p.batteryLevel ?? 1.0) - (battDrainFactor * voltFactor));
+                
+                const prevOilDisp = Math.round(p.oilLevel * 100);
+                const nextOilDisp = Math.round(nextOil * 100);
+                const prevBattDisp = Math.round((p.batteryLevel ?? 1.0) * 100);
+                const nextBattDisp = Math.round(nextBatt * 100);
+                
+                if (nextOilDisp < prevOilDisp || nextBattDisp < prevBattDisp) {
+                  triggeredHaptic = true;
+                }
+
+                if (nextBatt < 0.1 && (p.batteryLevel ?? 1.0) >= 0.1) {
+                  triggeredLowBattery = true;
+                }
+                
+                return { 
+                  ...p, 
+                  oilLevel: nextOil,
+                  batteryLevel: nextBatt
+                };
+              }
+              return p;
+            });
+            if (triggeredLowBattery && !isMuted) {
+              playLowBatteryBeep();
+            }
+            if (triggeredHaptic && !isMuted) {
+              playSubtleClickHiss();
+            }
+            return res;
+          });
+        } else if (activePlayer.device === 'disposable') {
+          setPlayers(prevPlayers => {
+            let triggeredHaptic = false;
+            let triggeredLowBattery = false;
+            const res = prevPlayers.map((p, idx) => {
+              if (idx === activePlayerIdx) {
+                const nextBatt = Math.max(0.01, (p.batteryLevel ?? 1.0) - (0.001 * voltFactor));
+                const nextOil = Math.min(1.0, p.oilLevel + (0.0008 * voltFactor));
+                
+                const prevBattDisp = Math.round((p.batteryLevel ?? 1.0) * 100);
+                const nextBattDisp = Math.round(nextBatt * 100);
+                const prevOilDisp = Math.round(p.oilLevel * 100);
+                const nextOilDisp = Math.round(nextOil * 100);
+                
+                if (nextBattDisp < prevBattDisp || nextOilDisp > prevOilDisp) {
+                  triggeredHaptic = true;
+                }
+
+                if (nextBatt < 0.1 && (p.batteryLevel ?? 1.0) >= 0.1) {
+                  triggeredLowBattery = true;
+                }
+                
+                return { 
+                  ...p, 
+                  batteryLevel: nextBatt,
+                  oilLevel: nextOil
+                };
+              }
+              return p;
+            });
+            if (triggeredLowBattery && !isMuted) {
+              playLowBatteryBeep();
+            }
+            if (triggeredHaptic && !isMuted) {
+              playSubtleClickHiss();
+            }
+            return res;
+          });
+        }
+
+        if (Math.floor(next * 10) % 10 === 0 && next < targetTime) {
+          triggerAudioBeep(330 + (next * 45), 'sine', 0.03);
+        }
+
+        if (next >= targetTime) {
+          clearInterval(timerRef.current!);
+          timerRef.current = null;
+          concludeSuccess();
+          return targetTime;
+        }
+        return next;
+      });
+    }, 100);
+  };
+
+  const haltInhalation = () => {
+    if (activeSessionState !== 'INHALING') return;
+    clearInterval(timerRef.current!);
+    timerRef.current = null;
+    
+    if (inhaleTimer < targetTime) {
+      concludeFail();
+    }
+  };
+
+  const concludeSuccess = () => {
+    stopInhaleSizzle();
+    if (!isMuted) playBlinkerSuccessTune();
+    setActiveSessionState('SUCCESS');
+    updateGlobalStatus('SUCCESS');
+    setIsDirectToggled(false);
+
+    try {
+      if (navigator.vibrate) {
+        navigator.vibrate(350);
+      }
+    } catch {}
+
+    const bonus = blinkMode === 'TAKE_BLINKER' ? 1 : 2;
+    setPlayers(prev => prev.map((p, idx) => {
+      if (idx === activePlayerIdx) {
+        const nextStreak = (p.streak || 0) + 1;
+        const nextScore = p.score + bonus;
+        updatePersonalBests(p.name, nextStreak, nextScore, true);
+
+        return { 
+          ...p, 
+          score: nextScore, 
+          status: 'SUCCESS',
+          totalBlinks: p.totalBlinks + 1,
+          totalAttempts: p.totalAttempts + 1,
+          totalDuration: p.totalDuration + targetTime,
+          streak: nextStreak
+        };
+      }
+      return p;
+    }));
+
+    handleSpawnConfettiCloud();
+    setFunnyQuote(SUCCESS_QUOTES[Math.floor(Math.random() * SUCCESS_QUOTES.length)]);
+  };
+
+  const concludeFail = () => {
+    stopInhaleSizzle();
+    if (!isMuted) playBuzzerTune();
+    setActiveSessionState('TAPPED_OUT');
+    updateGlobalStatus('TAPPED_OUT');
+    setIsDirectToggled(false);
+
+    try {
+      if (navigator.vibrate) {
+        navigator.vibrate([150, 80, 150]);
+      }
+    } catch {}
+
+    setPlayers(prev => {
+      const isThreeOrFour = prev.length >= 3;
+      if (isThreeOrFour) {
+        playSoundEliminated();
+      }
+      return prev.map((p, idx) => {
+        if (idx === activePlayerIdx) {
+          return { 
+            ...p, 
+            status: 'TAPPED_OUT',
+            isEliminated: isThreeOrFour ? true : p.isEliminated,
+            totalAttempts: p.totalAttempts + 1,
+            totalDuration: p.totalDuration + inhaleTimer,
+            streak: 0
+          };
+        }
+        return p;
+      });
+    });
+
+    setFunnyQuote(FAILURE_QUOTES[Math.floor(Math.random() * FAILURE_QUOTES.length)]);
+
+    // End game immediately (after small transition delay for visual feedback) for 2 players
+    if (players.length === 2) {
+      setTimeout(() => {
+        triggerAudioBeep(450, 'sine', 0.1);
+        setGamePhase('SUMMARY');
+        setShowCelebration(true);
+      }, 1500);
+    }
+  };
+
+  const updateGlobalStatus = (status: 'IDLE' | 'INHALING' | 'SUCCESS' | 'TAPPED_OUT') => {
+    setPlayers(prev => prev.map((p, idx) => idx === activePlayerIdx ? { ...p, status } : p));
+  };
+
+  const proceedNextTurn = () => {
+    triggerAudioBeep(410, 'sine', 0.08);
+    setInhaleTimer(0);
+    setActiveSessionState('IDLE');
+    setIsDirectToggled(false);
+    setFunnyQuote('Select option and draw.');
+    
+    setPlayers(prev => {
+      const resetPlayers = prev.map(p => ({
+        ...p,
+        status: p.isEliminated ? ('TAPPED_OUT' as const) : ('IDLE' as const)
+      }));
+      
+      // Look for next non-eliminated player index
+      let nextIdx = (activePlayerIdx + 1) % prev.length;
+      for (let i = 0; i < prev.length; i++) {
+        if (!prev[nextIdx].isEliminated) {
+          setActivePlayerIdx(nextIdx);
+          break;
+        }
+        nextIdx = (nextIdx + 1) % prev.length;
+      }
+      
+      return resetPlayers;
+    });
+  };
+
+  const triggerReset = () => {
+    triggerAudioBeep(220, 'square', 0.2);
+    setPlayers(prev => prev.map(p => ({ 
+      ...p, 
+      score: 0, 
+      status: 'IDLE', 
+      isEliminated: false,
+      oilLevel: p.device === 'disposable' ? 0.0 : 1.0, 
+      batteryLevel: 1.0,
+      totalBlinks: 0, 
+      totalAttempts: 0, 
+      totalDuration: 0,
+      streak: 0
+    })));
+    setActivePlayerIdx(0);
+    setInhaleTimer(0);
+    setActiveSessionState('IDLE');
+    setIsDirectToggled(false);
+    setFunnyQuote('Reset completed.');
+    setDrainTimeRemaining(drainGameDuration);
+    setGamePhase('LOBBY');
+  };
+
+
+
+  const handleAddNewPlayer = () => {
+    let chosenName = newPlayerName.trim().toUpperCase();
+    if (!chosenName) {
+      const untitledCount = players.filter(p => p.name.includes('UNTITLED')).length;
+      chosenName = untitledCount > 0 ? `UNTITLED ${untitledCount + 1}` : 'UNTITLED';
+    }
+    
+    if (players.length >= 4) {
+      triggerAudioBeep(150, 'sawtooth', 0.2);
+      return;
+    }
+
+    const brandNew: Player = {
+      id: String(Date.now()),
+      name: chosenName,
+      score: 0,
+      device: newPlayerDevice,
+      oilLevel: newPlayerDevice === 'disposable' ? 0.0 : 1.0,
+      batteryLevel: 1.0,
+      status: 'IDLE',
+      totalBlinks: 0,
+      totalAttempts: 0,
+      totalDuration: 0,
+      streak: 0
+    };
+
+    setPlayers([...players, brandNew]);
+    setNewPlayerName('');
+    playSoundPlayerAdded();
+  };
+
+  const handleRemovePlayer = (id: string) => {
+    setPlayers(players.filter(p => p.id !== id));
+    playSoundPlayerRemoved();
+  };
+
+  const getScreenRumbleStyle = () => {
+    if (activeSessionState !== 'INHALING') return '';
+    if (progressRatio > 0.85) return 'shake-heavy';
+    if (progressRatio > 0.55) return 'shake-medium';
+    if (progressRatio > 0.25) return 'shake-mild';
+    return '';
+  };
+
+  // Identify leading player
+  const leadingPlayer = [...players].sort((a, b) => b.score - a.score)[0];
+
+  return (
+    <div className={`min-h-screen bg-[#0c041b] text-white bg-scanlines font-mono selection:bg-[#a855f7] selection:text-black relative flex flex-col justify-between overflow-x-hidden ${getScreenRumbleStyle()}`}>
+      
+      {/* Dynamic Animated Vector Particle Overlay */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden z-40">
+        {particles.map((p) => (
+          <div
+            key={p.id}
+            className="absolute font-mono rounded flex items-center justify-center text-center select-none"
+            style={{
+              left: `${p.x}px`,
+              top: `${p.y}px`,
+              width: `${p.size}px`,
+              height: `${p.size}px`,
+              backgroundColor: p.color,
+              opacity: p.opacity,
+              transform: `translate(-50%, -50%) rotate(${p.rotation}deg)`,
+              boxShadow: `0 0 10px ${p.color}`,
+              color: p.color,
+              fontSize: '11px',
+            }}
+          />
+        ))}
+      </div>
+
+      {/* Celebratory Leaderboard Overlay triggered when results view is shown */}
+      <AnimatePresence>
+        {gamePhase === 'SUMMARY' && showCelebration && leadingPlayer && leadingPlayer.score > 0 && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 pointer-events-auto"
+          >
+            <CelebrationOverlay 
+              playerName={leadingPlayer.name} 
+              score={leadingPlayer.score} 
+              onClose={() => setShowCelebration(false)} 
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+
+
+      {/* Modern High-End Neo-Brutalist Header */}
+      <header className="w-full bg-[#11061c] border-b-4 border-black p-4 z-10 flex items-center justify-between flex-wrap gap-4">
+        <div className="flex items-center gap-4">
+          <div className="relative flex-shrink-0">
+            <div className="w-6 h-6 rounded-full animate-purple-pulse border-2 border-black" />
+          </div>
+          <div>
+            <span className="font-mono text-[10px] text-[#00f3ff] block uppercase">Blinker Mini Game</span>
+            <h1 className="font-sans text-3xl font-extrabold tracking-tight bg-gradient-to-r from-[#d946ef] to-[#a855f7] bg-clip-text text-transparent select-none glitch-text">
+              Blinker Game
+            </h1>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button 
+            id="info-toggle-btn"
+            onClick={() => {
+              setIsInfoOpen(true);
+              triggerAudioBeep(520, 'sine', 0.05);
+            }}
+            className="p-3 border-2 border-black bg-[#1f0e2d] hover:bg-[#00f3ff] hover:text-black transition-all flex items-center justify-center gap-1.5 neo-box-click font-bold text-xs"
+          >
+            <Info size={16} />
+            <span className="hidden sm:inline">GUIDE</span>
+          </button>
+
+          <button 
+            id="audio-toggle-btn"
+            onClick={() => {
+              setIsMuted(!isMuted);
+              triggerAudioBeep(400, 'sine', 0.05);
+            }}
+            className="p-3 border-2 border-black bg-[#1f0e2d] hover:bg-[#ff007f] hover:text-black transition-all flex items-center justify-center neo-box-click"
+          >
+            {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+          </button>
+
+          <button 
+            id="global-reset-btn"
+            onClick={triggerReset}
+            className="font-mono text-xs p-3 border-2 border-black bg-red-950 text-red-200 hover:bg-red-500 hover:text-white transition-all flex items-center gap-2 neo-box-click font-bold"
+          >
+            <RefreshCw size={12} />
+            Reset
+          </button>
+        </div>
+      </header>
+
+      {/* Main Core Window Grid */}
+      <main className="w-full max-w-6xl mx-auto p-4 flex-grow flex flex-col justify-center items-stretch z-10 my-2 gap-6">
+        
+        {/* LOBBY / SQUAD SETUP VIEW */}
+        <AnimatePresence mode="wait">
+          {gamePhase === 'LOBBY' && (
+            <motion.div
+              key="lobby-screen"
+              initial={{ opacity: 0, scale: 0.96, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: -15 }}
+              transition={{ type: "spring", stiffness: 180, damping: 20 }}
+              className="w-full max-w-2xl mx-auto flex flex-col gap-6 self-center"
+            >
+              
+              <div className="bg-[#13071f] border-4 border-black p-6 neo-box-purple relative overflow-hidden">
+              <div className="absolute right-0 top-0 w-24 h-24 bg-[#7b2cbf] opacity-10 transform rotate-45 translate-x-12 -translate-y-12" />
+              
+              <h2 className="font-sans text-xl font-bold text-[#d946ef] mb-2 flex items-center gap-2">
+                <ChevronRight size={24} className="text-[#a855f7]" /> Rules
+              </h2>
+              <p className="font-mono text-sm leading-relaxed text-slate-200 mb-4 font-sans">
+                Tap the button to start taking a blinker. Tap the button again to stop, or tap out if you can't keep drawing. Stop exactly on the target time to score.
+              </p>
+              <div className="inline-flex items-center gap-2 font-mono text-xs bg-black/50 border border-[#a855f7]/30 px-3 py-1.5 rounded text-slate-300">
+                <span className="font-bold text-[#d946ef]">IG:</span>
+                <a href="https://instagram.com/blinkergamefhs" target="_blank" rel="noopener noreferrer" className="hover:underline text-[#00f3ff] font-bold">
+                  @blinkergamefhs
+                </a>
+              </div>
+            </div>
+
+            {/* Blinker info board */}
+            <div className="bg-[#120a1f] border-4 border-black p-4 neo-box-cyan flex flex-col gap-2">
+              <h3 className="font-sans text-xs text-[#00f3ff] font-bold uppercase tracking-wider flex items-center gap-1.5 select-none">
+                <Sparkles size={13} className="text-[#00f3ff] animate-pulse" /> Standard Blinker Challenge
+              </h3>
+              <p className="font-mono text-[11px] leading-relaxed text-slate-400 font-sans">
+                Accumulate points by successfully sustaining deep draws for full target durations (8.0s or 10.0s) without stopping early or tapping out.
+              </p>
+            </div>
+
+            {/* Input form */}
+            <div className="bg-[#120a1f] border-4 border-black p-5 neo-box-cyan flex flex-col gap-5">
+              <div className="flex justify-between items-center">
+                <h3 className="font-mono text-xs text-[#39ff14] flex items-center gap-2 font-bold select-none">
+                  <Plus size={18} /> Players ({players.length} / 4)
+                </h3>
+                <span className="font-mono text-[10px] text-slate-500">Max 4 players</span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-[#0a0512] p-4 border-2 border-black">
+                <div className="flex flex-col gap-1.5 justify-center">
+                  <label className="font-mono text-[10px] text-slate-400">Name</label>
+                  <input 
+                    type="text"
+                    placeholder="Enter name"
+                    maxLength={14}
+                    value={newPlayerName}
+                    onChange={(e) => setNewPlayerName(e.target.value.toUpperCase())}
+                    className="w-full bg-[#140b20] border-2 border-black p-2.5 font-mono text-sm text-[#39ff14] focus:outline-none focus:border-[#a855f7] transition-all"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="font-mono text-[10px] text-slate-400">Device</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => {
+                        setNewPlayerDevice('cartridge');
+                        triggerAudioBeep(320, 'sine', 0.04);
+                      }}
+                      className={`font-mono text-xs p-2.5 border-2 transition-all flex items-center justify-center gap-2 ${
+                        newPlayerDevice === 'cartridge'
+                          ? 'bg-[#ff007f] text-black border-black font-bold'
+                          : 'bg-zinc-950 text-slate-400 border-zinc-800 hover:border-slate-500'
+                      }`}
+                    >
+                      <PixelCartridgeIcon size={16} />
+                      <span>Cartridge</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setNewPlayerDevice('disposable');
+                        triggerAudioBeep(320, 'sine', 0.04);
+                      }}
+                      className={`font-mono text-xs p-2.5 border-2 transition-all flex items-center justify-center gap-2 ${
+                        newPlayerDevice === 'disposable'
+                          ? 'bg-[#00f3ff] text-black border-black font-bold'
+                          : 'bg-zinc-950 text-slate-400 border-zinc-800 hover:border-slate-500'
+                      }`}
+                    >
+                      <PixelDisposableIcon size={16} />
+                      <span>Disposable</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setNewPlayerDevice('muhameds');
+                        triggerAudioBeep(320, 'sine', 0.04);
+                      }}
+                      className={`font-mono text-xs p-2.5 border-2 transition-all flex items-center justify-center gap-2 ${
+                        newPlayerDevice === 'muhameds'
+                          ? 'bg-[#eab308] text-black border-black font-bold'
+                          : 'bg-zinc-950 text-slate-400 border-zinc-800 hover:border-slate-500'
+                      }`}
+                    >
+                      <PixelMuhaIcon size={16} />
+                      <span>Muha Meds</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setNewPlayerDevice('boutiq');
+                        triggerAudioBeep(320, 'sine', 0.04);
+                      }}
+                      className={`font-mono text-xs p-2.5 border-2 transition-all flex items-center justify-center gap-2 ${
+                        newPlayerDevice === 'boutiq'
+                          ? 'bg-[#a78bfa] text-black border-black font-bold'
+                          : 'bg-zinc-950 text-slate-400 border-zinc-800 hover:border-slate-500'
+                      }`}
+                    >
+                      <PixelBoutiqIcon size={16} />
+                      <span>Boutiq</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={handleAddNewPlayer}
+                disabled={players.length >= 4}
+                className={`w-full font-sans text-sm p-4 border-4 border-black select-none text-black font-bold transition-all duration-150 ${
+                  players.length >= 4
+                    ? 'bg-zinc-700 opacity-40 cursor-not-allowed text-zinc-500'
+                    : 'bg-[#39ff14] hover:bg-[#5aff39] hover:translate-x-0.5 hover:translate-y-0.5 active:translate-y-1 active:translate-x-1 cursor-pointer shadow-[5px_5px_0_#000]'
+                }`}
+              >
+                Add player
+              </button>
+            </div>
+
+            {/* Configured Roster Grid */}
+            <div className="bg-[#120a1f] border-4 border-black p-5 neo-box-purple">
+              <h3 className="font-mono text-xs mb-4 text-[#d946ef] font-bold">
+                Players ({players.length}/4)
+              </h3>
+              
+              {players.length === 0 ? (
+                <div className="text-center py-8 border-2 border-dashed border-[#222]">
+                  <p className="font-mono text-xs text-slate-500">No players entered</p>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2 relative">
+                  <AnimatePresence initial={false}>
+                    {players.map((p, idx) => (
+                      <motion.div 
+                        key={p.id}
+                        initial={{ opacity: 0, x: -30, scale: 0.95 }}
+                        animate={{ opacity: 1, x: 0, scale: 1 }}
+                        exit={{ opacity: 0, x: 40, scale: 0.9, transition: { duration: 0.2 } }}
+                        transition={{ type: "spring", stiffness: 350, damping: 25 }}
+                        className="bg-black/50 border-2 border-black p-3.5 flex items-center justify-between gap-4 origin-left"
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="font-mono text-[10px] text-zinc-600 block">Player {idx + 1}</span>
+                          <div>
+                            <p className="font-mono text-xs text-white uppercase">{p.name}</p>
+                            <span className="font-mono text-[10px] text-slate-400 flex items-center gap-1 mt-0.5">
+                              {getDeviceIcon(p.device, 12)}
+                              <span>{getDeviceName(p.device)}</span>
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-3">
+                          <span 
+                            className="font-mono text-[10px] border px-1.5 py-0.5 flex items-center gap-1 font-bold"
+                            style={{
+                              borderColor: getDeviceAccentColor(p.device),
+                              color: getDeviceAccentColor(p.device),
+                              backgroundColor: `${getDeviceAccentColor(p.device)}10`
+                            }}
+                          >
+                            {getDeviceIcon(p.device, 11)} {getDeviceName(p.device)}
+                          </span>
+                          <button
+                            onClick={() => handleRemovePlayer(p.id)}
+                            className="text-red-500 hover:text-red-300 p-1.5 bg-[#170e24] border border-black hover:bg-black transition-colors"
+                            title="Remove"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
+                      </motion.div>
+                    ))}
+                  </AnimatePresence>
+                </div>
+              )}
+
+              {players.length >= 2 ? (
+                <button
+                  onClick={() => {
+                    triggerAudioBeep(620, 'square', 0.2);
+                    setDrainTimeRemaining(drainGameDuration);
+                    setGamePhase('GAME_ON');
+                  }}
+                  className="w-full mt-4 bg-[#ffd700] hover:bg-[#ffdf1c] font-sans text-sm text-black font-bold p-4 border-4 border-black shadow-[6px_6px_0_#000] hover:translate-x-0.5 hover:translate-y-0.5 active:translate-y-1.5 active:translate-x-1.5 transition-all flex items-center justify-center gap-2"
+                >
+                  <Play size={16} /> Start
+                </button>
+              ) : (
+                <div className="w-full mt-4 bg-zinc-950 p-4 border-2 border-dashed border-zinc-800 text-center font-mono text-xs text-zinc-500">
+                  Add 2 players to start.
+                </div>
+              )}
+            </div>
+            
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ACTIVE COMBAT SCENE VIEW */}
+      <AnimatePresence mode="wait">
+        {gamePhase === 'GAME_ON' && (
+          <motion.div
+            key="game-screen"
+            initial={{ opacity: 0, scale: 0.98 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.98 }}
+            transition={{ duration: 0.35, ease: 'easeOut' }}
+            className="w-full flex flex-col gap-6 text-slate-100"
+          >
+            
+            <div className="flex justify-between items-center bg-[#110520] border-2 border-black px-4 py-2">
+              <span className="font-mono text-xs text-[#ffd700] flex items-center gap-2 font-bold">
+                <Sparkles size={12} className="text-[#39ff14] animate-pulse" /> Players
+              </span>
+              <span className="font-mono text-xs text-slate-400">
+                Active player: #{activePlayerIdx + 1}
+              </span>
+            </div>
+
+            {/* Squad cards */}
+            <div className={`grid gap-4 w-full ${
+              players.length === 1 ? 'grid-cols-1' :
+              players.length === 2 ? 'grid-cols-1 sm:grid-cols-2' :
+              'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4'
+            }`}>
+              <AnimatePresence mode="popLayout">
+                {players.map((p, idx) => {
+                  const isActive = idx === activePlayerIdx;
+                  const isElim = p.isEliminated;
+                  return (
+                    <motion.div 
+                      key={p.id}
+                      layout
+                      initial={{ opacity: 0, scale: 0.85, y: 25 }}
+                      whileHover={isElim ? {} : { scale: isActive ? 1.03 : 1.02 }}
+                      animate={isElim ? {
+                        opacity: [1.0, 0.25, 0.95, 0.35, 0.45],
+                        scaleX: [1.0, 1.15, 0.05, 0.97, 0.95],
+                        scaleY: [1.0, 0.85, 0.02, 0.97, 0.95],
+                        rotate: [0, 1.5, -4, -2.5, -2.5],
+                        x: [0, -8, 6, -3, 0],
+                        y: [0, 6, -4, 2, 0],
+                        background: ["#11071e", "#3a1d6e", "#ffffff", "#0c041b", "#080210"],
+                        borderColor: ["#39ff14", "#ef4444", "#ffffff", "#1e293b", "#4b5563"],
+                        boxShadow: [
+                          "8px 8px 0px #39ff14",
+                          "0px 0px 25px rgba(239, 68, 68, 0.8)",
+                          "0px 0px 40px rgba(255, 255, 255, 1)",
+                          "0px 0px 0px rgba(0,0,0,0)",
+                          "0px 0px 0px rgba(0,0,0,0)"
+                        ],
+                        transition: {
+                          duration: 1.1,
+                          times: [0, 0.15, 0.35, 0.6, 1.0],
+                          ease: "easeInOut"
+                        }
+                      } : isActive ? {
+                        opacity: 1.0,
+                        scale: 1.01,
+                        rotate: 0,
+                        background: ["#11071e", "#1b0c30", "#11071e"],
+                        borderColor: ["#39ff14", "#d946ef", "#39ff14"],
+                        boxShadow: [
+                          "8px 8px 0px #39ff14",
+                          "8px 8px 16px rgba(217, 70, 239, 0.45)",
+                          "8px 8px 0px #39ff14"
+                        ],
+                        transition: {
+                          background: { repeat: Infinity, duration: 2.2, ease: "easeInOut" },
+                          borderColor: { repeat: Infinity, duration: 2.2, ease: "easeInOut" },
+                          boxShadow: { repeat: Infinity, duration: 2.2, ease: "easeInOut" },
+                          scale: { duration: 0.3 }
+                        }
+                      } : {
+                        opacity: 0.75,
+                        scale: 1.0,
+                        rotate: 0,
+                        background: "#11071e",
+                        borderColor: "#000000",
+                        boxShadow: "0px 0px 0px rgba(0,0,0,0)",
+                        transition: { duration: 0.3 }
+                      }}
+                      exit={{ 
+                        opacity: 0, 
+                        scale: 0.6, 
+                        y: 70, 
+                        rotate: 15, 
+                        transition: { duration: 0.5, ease: "backIn" } 
+                      }}
+                      className={`glitch-hover relative border-4 p-4 flex flex-col justify-between transition-all duration-200 select-none ${
+                        isElim
+                          ? 'grayscale'
+                          : isActive 
+                            ? 'z-10' 
+                            : 'hover:opacity-100'
+                      }`}
+                    >
+                      {/* High-Contrast Interactive Hover Flash / Glow */}
+                      {!isElim && (
+                        <motion.div
+                          className="absolute inset-0 bg-gradient-to-tr from-[#00f3ff]/40 via-white to-[#ff007f]/40 pointer-events-none z-30 opacity-0"
+                          whileHover={{
+                            opacity: [0.95, 0],
+                            transition: { duration: 0.4, ease: "easeOut" }
+                          }}
+                        />
+                      )}
+
+                      {/* Interactive CRT Collapse Beam shutoff lines */}
+                      {isElim && (
+                        <motion.div
+                          initial={{ scaleY: 0, opacity: 0 }}
+                          animate={{
+                            scaleY: [0, 0.1, 1, 0.02, 0],
+                            scaleX: [0, 1.15, 1, 0.02, 0],
+                            opacity: [0, 1, 1, 0.9, 0],
+                          }}
+                          transition={{
+                            duration: 0.9,
+                            times: [0, 0.12, 0.28, 0.42, 0.6],
+                            ease: "easeOut"
+                          }}
+                          className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-[3.5px] bg-white shadow-[0_0_12px_rgba(255,255,255,1),0_0_24px_rgba(0,243,255,1),0_0_36px_rgba(255,0,127,1)] z-40 pointer-events-none"
+                        />
+                      )}
+                      
+                      {isElim && (
+                        <motion.div
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: [0, 0.9, 0.2, 0.75, 0] }}
+                          transition={{
+                            duration: 0.8,
+                            times: [0, 0.15, 0.3, 0.5, 0.7]
+                          }}
+                          className="absolute inset-0 bg-white/20 mix-blend-color-dodge z-30 pointer-events-none"
+                        />
+                      )}
+
+                      {isElim && (
+                        <div className="absolute -top-3.5 left-4 bg-red-600/95 text-white font-mono text-[9px] px-2 py-0.5 border-2 border-black font-bold uppercase tracking-wider">
+                          Eliminated
+                        </div>
+                      )}
+                      {!isElim && isActive && (
+                        <div className="absolute -top-3.5 left-4 bg-[#39ff14]/90 text-black font-mono text-[10px] px-2 py-0.5 border-2 border-black font-bold animate-pulse">
+                          Active
+                        </div>
+                      )}
+                      
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-3">
+                          <AvatarBadge score={p.score} status={p.status} />
+                          <div className="overflow-hidden">
+                            <h4 className="font-mono text-xs text-white truncate max-w-[100px] tracking-tight">
+                              {p.name}
+                            </h4>
+                            <span className="font-mono text-[10px] flex items-center gap-1 mt-0.5" style={{ color: getDeviceAccentColor(p.device) }}>
+                              {getDeviceIcon(p.device, 12)}
+                              <span>{getDeviceName(p.device)}</span>
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="pt-1">
+                          <BatteryIcon level={p.batteryLevel ?? 1.0} />
+                        </div>
+                      </div>
+
+                      <div className="my-4 py-2 border-t border-b border-[#222]/50 bg-black/30 px-2.5">
+                        <div className="flex justify-between items-center text-[10px] font-mono text-slate-400 mb-1">
+                          <span>Power</span>
+                          <span>{p.device === 'cartridge' ? '3.7V' : p.device === 'boutiq' ? 'Dual-Core' : 'Direct'}</span>
+                        </div>
+                        {p.device === 'cartridge' ? (
+                          <div className="w-full bg-[#180d28] border border-black h-4 p-0.5 relative">
+                            <div 
+                              className="h-full bg-oil transition-all duration-300"
+                              style={{ width: `${p.oilLevel * 100}%` }}
+                            />
+                            <span className="absolute inset-0 flex justify-center items-center text-[9px] font-mono text-black font-bold">
+                              Oil level: {Math.round(p.oilLevel * 100)}%
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col gap-1.5">
+                            <div className="w-full bg-[#180d28] border border-black h-4 p-0.5 relative">
+                              <div 
+                                className={`h-full transition-all duration-300 ${p.batteryLevel < 0.1 ? 'bg-red-600 animate-pulse' : 'bg-[#00f3ff]'}`}
+                                style={{ width: `${(p.batteryLevel ?? 1.0) * 100}%` }}
+                              />
+                              <span className={`absolute inset-0 flex justify-center items-center text-[9px] font-mono font-bold ${p.batteryLevel < 0.1 ? 'text-white animate-pulse' : 'text-black'}`}>
+                                Battery: {Math.round((p.batteryLevel ?? 1.0) * 100)}%
+                              </span>
+                            </div>
+                            
+                            <div className="w-full bg-[#180d28] border border-black h-4 p-0.5 relative">
+                              <div 
+                                className="h-full bg-oil transition-all duration-300"
+                                style={{ width: `${p.oilLevel * 100}%` }}
+                              />
+                              <span className="absolute inset-0 flex justify-center items-center text-[9px] font-mono text-black font-bold">
+                                Oil: {Math.round(p.oilLevel * 100)}%
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Summary Panel */}
+                      <div className="bg-[#12071f]/80 p-2.5 border border-[#39ff14]/30 rounded-xs mb-2">
+                        <span className="block text-[9px] text-[#00f3ff] uppercase font-bold tracking-tight mb-1 border-b border-zinc-800 pb-1">
+                          Summary Panel
+                        </span>
+                        <div className="space-y-1 font-mono text-[10px] text-slate-300">
+                          <div className="flex justify-between">
+                            <span className="text-slate-400">Total Blinks:</span>
+                            <span className="text-white font-bold">{p.totalBlinks}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-slate-400">Avg Duration:</span>
+                            <span className="text-white font-bold">
+                              {p.totalAttempts > 0 
+                                ? `${(p.totalDuration / p.totalAttempts).toFixed(1)}s` 
+                                : '0.0s'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Streak & Score Row */}
+                      <div className="flex justify-between items-center bg-black/40 p-2 border border-black mb-2">
+                        <span className="font-mono text-xs text-[#ffd700] flex items-center gap-1">
+                          <Award size={10} /> Score
+                        </span>
+                        <span className="font-mono text-xs text-[#39ff14] font-bold">
+                          {p.score} pts
+                        </span>
+                      </div>
+
+                      {/* Quick Stats details row */}
+                      <div className="bg-black/20 p-2 border border-black/50 text-[10px] space-y-1 mb-2 font-mono">
+                        <div className="flex justify-between">
+                          <span className="text-slate-400">Streak:</span>
+                          <span className="text-[#3aef14] font-bold">
+                            {p.streak || 0}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="text-center font-mono text-xs mt-1">
+                        {isElim ? (
+                          <span className="block bg-red-950/40 border border-red-900 text-red-500 py-1 uppercase font-bold">
+                            Out
+                          </span>
+                        ) : p.status === 'INHALING' ? (
+                          <span className="block bg-pink-900 border border-pink-500 text-pink-100 py-1 uppercase animate-pulse font-bold flex items-center justify-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-ping inline-block" />
+                            HOLD ({inhaleTimer.toFixed(1)}s)
+                          </span>
+                        ) : p.status === 'SUCCESS' ? (
+                          <span className="block bg-green-950 border border-green-500 text-green-300 py-1 uppercase font-bold">
+                            Done
+                          </span>
+                        ) : p.status === 'TAPPED_OUT' ? (
+                          <span className="block bg-red-950 border border-red-500 text-red-300 py-1 uppercase font-bold">
+                            Stopped
+                          </span>
+                        ) : (
+                          <span className="block bg-zinc-950 border border-zinc-800 text-zinc-500 py-1 uppercase font-bold">
+                            Wait
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Visual Progress Bar beneath active player card */}
+                      {isActive && !isElim && (
+                        <div className="mt-3 pt-2 border-t border-zinc-800/60">
+                          <div className="flex justify-between items-center text-[9px] font-mono text-[#00f3ff] mb-1">
+                            <span className="flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-[#39ff14] animate-ping" />
+                              Progress
+                            </span>
+                            <span>
+                              {p.status === 'SUCCESS' ? '100%' : `${Math.min(100, Math.round(progressRatio * 100))}%`}
+                            </span>
+                          </div>
+                          <div className="w-full bg-[#1b0b2e] border border-black h-2.5 overflow-hidden relative rounded-xs">
+                            <div 
+                              className={`h-full transition-all duration-100 ease-out ${
+                                p.status === 'TAPPED_OUT'
+                                  ? 'bg-red-500'
+                                  : 'bg-gradient-to-r from-[#ff007f] via-[#00f3ff] to-[#39ff14]'
+                              }`}
+                              style={{ 
+                                width: `${
+                                  p.status === 'SUCCESS' 
+                                    ? 100 
+                                    : p.status === 'TAPPED_OUT'
+                                      ? (inhaleTimer / targetTime) * 100
+                                      : Math.min(100, progressRatio * 100)
+                                }%` 
+                              }}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </motion.div>
+                  );
+                })}
+              </AnimatePresence>
+            </div>
+
+            {/* Interaction control board */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 bg-[#11061c] border-4 border-black p-6 neo-box relative" ref={containerRef}>
+              
+              {/* Graphical Display */}
+              <div className="lg:col-span-4 flex flex-col justify-center items-center bg-[#07030e] border-2 border-black p-4 relative min-h-[220px]">
+                {activePlayer.device === 'cartridge' && (
+                  <CartridgeSVG 
+                    oilLevel={activePlayer.oilLevel} 
+                    isPulsing={activeSessionState === 'INHALING'} 
+                    voltage={voltage}
+                    batteryLevel={activePlayer.batteryLevel}
+                    isCompleted={activeSessionState === 'SUCCESS'}
+                    progress={progressRatio}
+                  />
+                )}
+                {activePlayer.device === 'disposable' && (
+                  <DisposableVapeSVG 
+                    isPulsing={activeSessionState === 'INHALING'} 
+                    oilLevel={activePlayer.oilLevel}
+                    batteryLevel={activePlayer.batteryLevel}
+                    voltage={voltage}
+                    isCompleted={activeSessionState === 'SUCCESS'}
+                    progress={progressRatio}
+                  />
+                )}
+                {activePlayer.device === 'muhameds' && (
+                  <MuhaMedsSVG 
+                    isPulsing={activeSessionState === 'INHALING'} 
+                    oilLevel={activePlayer.oilLevel}
+                    batteryLevel={activePlayer.batteryLevel}
+                    voltage={voltage}
+                    isCompleted={activeSessionState === 'SUCCESS'}
+                    progress={progressRatio}
+                  />
+                )}
+                {activePlayer.device === 'boutiq' && (
+                  <BoutiqSVG 
+                    isPulsing={activeSessionState === 'INHALING'} 
+                    oilLevel={activePlayer.oilLevel}
+                    batteryLevel={activePlayer.batteryLevel}
+                    voltage={voltage}
+                    isCompleted={activeSessionState === 'SUCCESS'}
+                    progress={progressRatio}
+                    playerName={activePlayer.name}
+                  />
+                )}
+
+                {/* Real-time Dynamic Smoke/Vapor Clouds */}
+                {activeSessionState === 'INHALING' && (
+                  <div className="absolute top-10 left-1/2 -translate-x-1/2 w-16 h-28 pointer-events-none z-20 flex justify-center" style={{ filter: `brightness(${voltage >= 4.0 ? 1.45 : voltage <= 2.4 ? 0.75 : 1.15})` }}>
+                    {getSmokeParticles().map((p) => (
+                      <div 
+                        key={p.id}
+                        className={`absolute rounded-full ${p.blur} ${p.bg} animate-smoke-${p.dir}`}
+                        style={{
+                          animationDelay: p.delay,
+                          width: p.size,
+                          height: p.size,
+                        }}
+                      />
+                    ))}
+                  </div>
+                )}
+
+                {/* Persistent Faint Drifting Neon Trail Clouds */}
+                <div className="absolute inset-0 pointer-events-none overflow-hidden z-25">
+                  {trailParticles.map((t) => (
+                    <div
+                      key={t.id}
+                      className={`absolute rounded-full p-0 m-0 ${t.blur}`}
+                      style={{
+                        left: `calc(50% + ${t.x}px)`,
+                        top: `${t.y}px`,
+                        width: `${t.size}px`,
+                        height: `${t.size}px`,
+                        backgroundColor: t.color,
+                        opacity: t.opacity,
+                        transform: 'translate(-50%, -50%)',
+                        boxShadow: `0 0 ${t.size / 2}px ${t.color}`,
+                        transition: 'opacity 0.2s ease-out, width 0.2s ease-out, height 0.2s ease-out',
+                      }}
+                    />
+                  ))}
+                </div>
+
+                <div className="mt-2 text-center w-full">
+                  <span className="text-[10px] font-mono flex items-center justify-center gap-1.5 font-bold" style={{ color: getDeviceAccentColor(activePlayer.device) }}>
+                    {getDeviceIcon(activePlayer.device, 12)}
+                    <span>{getDeviceName(activePlayer.device)}</span>
+                  </span>
+                </div>
+              </div>
+
+              {/* Console Control Interface */}
+              <div className="lg:col-span-8 flex flex-col justify-between gap-4">
+                
+                <div className="border-b border-zinc-800 pb-2">
+                  <span className="font-mono text-[10px] text-slate-400 block mb-1">Active player</span>
+                  <div className="flex justify-between items-center">
+                    <h3 className="font-sans text-xl font-bold text-white uppercase tracking-tight font-sans">
+                      {activePlayer.name}
+                    </h3>
+                    <div className="font-mono text-xs bg-[#ff007f] text-black px-2 py-0.5 border border-black font-bold">
+                      Score: {activePlayer.score}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Vintage Voltage Selector Dial */}
+                <div className="bg-[#0b0413] p-3 border-2 border-black flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <span className="font-mono text-xs text-[#00f3ff] block font-bold uppercase">Battery Voltage</span>
+                    <span className="text-[9px] text-slate-400 font-mono block">Higher voltage = thick clouds, faster drain. Lower = smooth flavor.</span>
+                  </div>
+                  <div className="flex gap-2">
+                    {[2.4, 3.2, 4.0].map((v) => (
+                      <button
+                        key={v}
+                        id={`voltage-${v}`}
+                        onClick={() => {
+                          setVoltage(v);
+                          triggerAudioBeep(220 + (v * 100), 'triangle', 0.06);
+                        }}
+                        className={`font-mono text-xs px-3 py-1.5 border-2 border-black font-bold transition-all flex items-center justify-center gap-1.5 ${
+                          voltage === v
+                            ? 'bg-[#00f3ff] text-black shadow-[2px_2px_0px_#000]'
+                            : 'bg-[#180a24] text-slate-400 hover:text-white hover:bg-[#2c133f]'
+                        }`}
+                      >
+                        <span>{v.toFixed(1)}V</span>
+                        <span 
+                          className={`w-2 h-2 rounded-full border border-black/50 ${
+                            v === 2.4 ? 'bg-[#c084fc]' : v === 3.2 ? 'bg-[#34d399]' : 'bg-[#f87171]'
+                          }`}
+                        />
+                      </button>
+                    ))}
+                  </div>
+                    <div className="bg-[#0b0413] p-3 border-2 border-black">
+                  <span className="font-mono text-xs text-[#00f3ff] block mb-2 font-bold uppercase">Select duration</span>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      onClick={() => {
+                        setBlinkMode('TAKE_BLINKER');
+                        playSoundModeSelect();
+                      }}
+                      disabled={activeSessionState === 'INHALING'}
+                      className={`font-mono text-xs p-2.5 border-2 text-left flex flex-col gap-1 transition-all ${
+                        blinkMode === 'TAKE_BLINKER'
+                          ? 'border-[#39ff14] bg-[#39ff14]/10 text-[#39ff14]'
+                          : 'border-zinc-800 text-slate-400'
+                      }`}
+                    >
+                      <span className="font-bold text-white">8 seconds</span>
+                      <span className="text-slate-400">1 point</span>
+                    </button>
+ 
+                    <button
+                      onClick={() => {
+                        setBlinkMode('DOUBLE_BLINKER');
+                        playSoundModeSelect();
+                      }}
+                      disabled={activeSessionState === 'INHALING'}
+                      className={`font-mono text-xs p-2.5 border-2 text-left flex flex-col gap-1 transition-all ${
+                        blinkMode === 'DOUBLE_BLINKER'
+                          ? 'border-[#ff007f] bg-[#ff007f]/10 text-[#ff007f]'
+                          : 'border-zinc-800 text-slate-400'
+                      }`}
+                    >
+                      <span className="font-bold text-white">10 seconds</span>
+                      <span className="text-slate-400">2 points</span>
+                    </button>
+                  </div>
+                </div>
+ 
+              </div>
+
+                <div className="bg-[#07030e] border-2 border-black p-3 text-center my-1">
+                  <div className="flex justify-between text-xs font-mono text-slate-400 mb-1">
+                    <span>Temperature: {Math.round(25 + progressRatio * 315)}°C</span>
+                    <span>Timer</span>
+                  </div>
+
+                  <div className={`w-full bg-[#1b0b2e] border-2 border-black h-10 relative overflow-hidden transition-all duration-300 ${activeSessionState === 'INHALING' && progressRatio >= 0.75 ? 'animate-glow-pulse' : ''}`}>
+                    <div 
+                      className="h-full absolute left-0 top-0 transition-all duration-100 ease-out"
+                      style={{ 
+                        width: `${progressRatio * 100}%`,
+                        background: activeSessionState === 'INHALING'
+                          ? 'linear-gradient(90deg, #ff007f, #00f3ff, #39ff14, #ff007f)'
+                          : 'linear-gradient(270deg, #444, #666)'
+                      }}
+                    />
+                    
+                    <span className="absolute inset-0 flex justify-center items-center text-xs font-mono text-white z-10 font-bold tracking-widest drop-shadow-[2px_2px_0px_#000]">
+                      {inhaleTimer.toFixed(1)}s / {targetTime}.0s
+                    </span>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-black/50 border border-[#222] min-h-[50px] flex items-center gap-3">
+                  <AlertTriangle className={activeSessionState === 'TAPPED_OUT' || activeSessionState === 'INHALING' ? 'text-red-500 animate-bounce' : 'text-[#ffd700]'} size={20} />
+                  <p className="font-mono text-sm uppercase text-slate-300 leading-tight">
+                    {funnyQuote}
+                  </p>
+                </div>
+
+                {/* Tactile Activations Grid */}
+                <div className="flex flex-col gap-3">
+                  <button
+                    id="inhale-toggle-btn"
+                    onClick={() => {
+                      if (activeSessionState === 'INHALING') {
+                        haltInhalation();
+                        setIsDirectToggled(false);
+                      } else {
+                        startInhalation();
+                        setIsDirectToggled(true);
+                      }
+                    }}
+                    disabled={activeSessionState === 'SUCCESS' || activeSessionState === 'TAPPED_OUT'}
+                    className={`w-full text-center py-4 border-4 border-black text-black font-sans font-black text-sm uppercase tracking-widest transition-all duration-300 relative overflow-hidden select-none touch-none ${
+                      activeSessionState === 'SUCCESS' || activeSessionState === 'TAPPED_OUT'
+                        ? 'bg-zinc-800 text-zinc-500 border-zinc-950 cursor-not-allowed shadow-none'
+                        : isDirectToggled
+                          ? 'rainbow-smoke-bg text-white shadow-[0_0_20px_rgba(255,0,127,0.5)] border-[#ff007f] scale-[0.98]'
+                          : 'bg-[#00f3ff] hover:bg-cyan-300 cursor-pointer shadow-[6px_6px_0px_#000000] hover:shadow-[3px_3px_0px_#000000] hover:translate-x-0.5 hover:translate-y-0.5 active:scale-95'
+                    }`}
+                  >
+                    {isDirectToggled && (
+                      <span className="absolute inset-0 bg-gradient-to-r from-[#ff007f]/20 via-[#00f3ff]/20 to-[#39ff14]/20 animate-pulse" />
+                    )}
+                    {isDirectToggled ? 'STOP BLINKER' : 'TAKE A BLINKER'}
+                  </button>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <button
+                      id="manual-tap-btn"
+                      onClick={concludeFail}
+                      disabled={activeSessionState !== 'INHALING'}
+                      className={`font-mono text-xs p-3.5 border-4 border-black font-bold uppercase transition-all ${
+                        activeSessionState === 'INHALING'
+                          ? 'bg-red-600 text-white hover:bg-red-500 hover:shadow-[3px_3px_0_#000] cursor-pointer animate-pulse'
+                          : 'bg-zinc-950 text-slate-600 border-zinc-800'
+                      }`}
+                    >
+                      Tap out
+                    </button>
+
+                    <button
+                      id="next-combatant-btn"
+                      onClick={() => {
+                        if (isGameOver) {
+                          triggerAudioBeep(450, 'sine', 0.1);
+                          setGamePhase('SUMMARY');
+                          setShowCelebration(true);
+                        } else {
+                          proceedNextTurn();
+                        }
+                      }}
+                      disabled={activeSessionState === 'IDLE' || activeSessionState === 'INHALING'}
+                      className={`font-mono text-xs p-3.5 border-4 border-black font-bold uppercase transition-all ${
+                        activeSessionState === 'IDLE' || activeSessionState === 'INHALING'
+                          ? 'bg-zinc-900 border-zinc-800 text-slate-500 cursor-not-allowed'
+                          : isGameOver
+                            ? 'bg-[#ffd700] text-black hover:bg-amber-400 shadow-[4px_4px_0_#000] active:translate-y-0.5'
+                            : 'bg-[#39ff14] text-black hover:bg-[#59ff3b] shadow-[4px_4px_0_#000] active:translate-y-0.5'
+                      }`}
+                    >
+                      {isGameOver ? "Results" : "Next"}
+                    </button>
+                  </div>
+
+                </div>
+
+              </div>
+
+            </div>
+
+            {/* Quick Action Navigation Deck */}
+            <div className="flex justify-between items-center flex-wrap gap-4 bg-[#11061c] border-4 border-black p-4 neo-box shadow-none">
+              <span className="font-mono text-xs text-slate-400">Controls</span>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    triggerAudioBeep(450, 'sine', 0.1);
+                    setGamePhase('SUMMARY');
+                    setShowCelebration(true);
+                  }}
+                  className="font-mono text-xs p-2.5 bg-[#ffd700] hover:bg-amber-400 text-black border-2 border-black font-bold hover:translate-x-0.5 hover:translate-y-0.5 transition-all"
+                >
+                  Results
+                </button>
+                <button
+                  onClick={() => {
+                    triggerAudioBeep(300, 'square', 0.1);
+                    setGamePhase('LOBBY');
+                  }}
+                  className="font-mono text-xs p-2.5 bg-[#120a1f] hover:bg-slate-800 text-slate-300 border-2 border-black font-bold hover:translate-x-0.5 hover:translate-y-0.5 transition-all"
+                >
+                  Lobby
+                </button>
+              </div>
+            </div>
+
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* SUMMARY / LEADERBOARD VIEW */}
+      <AnimatePresence mode="wait">
+        {gamePhase === 'SUMMARY' && (
+          <motion.div
+            key="summary-screen"
+            initial={{ opacity: 0, scale: 0.95, y: 30 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: -30 }}
+            transition={{ type: "spring", stiffness: 180, damping: 18 }}
+            className="w-full max-w-xl mx-auto flex flex-col gap-6 text-center p-2 self-center"
+          >
+            
+            <div className="bg-[#12061c] border-4 border-black p-6 neo-box-pink relative flex flex-col items-center">
+              <h2 className="font-sans text-3xl font-extrabold text-[#ff007f] uppercase tracking-wide select-none">
+                Results
+              </h2>
+              <div className="font-mono text-xs text-[#00f3ff] mt-2 border border-[#333] px-2 py-0.5 bg-black uppercase">
+                Session finished
+              </div>
+            </div>
+
+            <div className="bg-[#11051e] border-4 border-black p-5 neo-box">
+              <h3 className="font-mono text-xs text-slate-400 mb-4 uppercase font-bold">
+                Rankings
+              </h3>
+              
+              <div className="flex flex-col gap-4">
+                {[...players]
+                  .sort((a, b) => b.score - a.score)
+                  .map((p, idx) => {
+                    const labelText = `${p.score} points`;
+                    return (
+                      <div 
+                        key={p.id}
+                        className="bg-black/50 border-2 border-black p-4 flex flex-col gap-2 animate-fade-in"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <span className="font-mono text-xs text-[#ffd700] font-bold">
+                              {idx === 0 ? (
+                                <span className="flex items-center gap-1 text-[#c084fc]">
+                                  <PixelCrownIcon size={14} /> 1st
+                                </span>
+                              ) : `#${idx + 1}`}
+                            </span>
+                            <AvatarBadge score={p.score} status="IDLE" />
+                            <div className="text-left ml-1">
+                              <p className="font-mono text-sm font-bold text-white uppercase">{p.name}</p>
+                              <span className="font-mono text-xs text-[#39ff14]">
+                                {p.score <= 2 ? 'Level 1' : p.score <= 5 ? 'Level 2' : p.score <= 9 ? 'Level 3' : 'Level 4'}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="text-right">
+                            <span className="font-mono text-sm text-[#00f3ff] block pr-1 font-bold">
+                              {labelText}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Summary Player Card Statistics Expansion */}
+                        {(() => {
+                          const pb = getPersonalBest(p.name);
+                          return (
+                            <div className="flex flex-col gap-2">
+                              <div className="grid grid-cols-2 gap-2 bg-[#170e24]/40 p-2.5 border border-black/40 text-[11px] text-slate-400 font-mono text-left">
+                                <div>
+                                  <span className="block text-[9px] text-slate-500 uppercase">Total Blinks</span>
+                                  <span className="text-white font-bold">{p.totalBlinks}</span>
+                                </div>
+                                <div>
+                                  <span className="block text-[9px] text-slate-500 uppercase">Avg Duration</span>
+                                  <span className="text-white font-bold">
+                                    {p.totalAttempts > 0 
+                                      ? `${(p.totalDuration / p.totalAttempts).toFixed(1)}s` 
+                                      : '0.0s'}
+                                  </span>
+                                </div>
+                              </div>
+                              {/* Personal Bests (Local Storage) */}
+                              <div className="bg-black/40 border border-zinc-800 p-2 text-left text-[10px] font-mono">
+                                <span className="block text-[8px] text-[#00f3ff] uppercase font-bold mb-1">Personal Best</span>
+                                <div className="grid grid-cols-2 gap-2">
+                                  <div>
+                                    <span className="text-slate-500 block text-[8px] uppercase">Streak</span>
+                                    <span className="text-[#39ff14] font-bold">{pb.maxStreak} blinks</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-slate-500 block text-[8px] uppercase">Score</span>
+                                    <span className="text-[#ffd700] font-bold">{pb.maxScore} points</span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })()}
+
+                      </div>
+                    );
+                  })}
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 mt-6">
+                <button
+                  onClick={() => {
+                    triggerAudioBeep(320, 'sine', 0.1);
+                    setGamePhase('GAME_ON');
+                  }}
+                  className="font-mono text-xs p-3.5 text-black bg-[#00f3ff] hover:bg-cyan-300 font-bold border-2 border-black shadow-[3px_3px_0_#000] hover:translate-x-0.5 hover:translate-y-0.5 active:translate-y-1.5 active:translate-x-1.5 transition-all"
+                >
+                  Play
+                </button>
+                <button
+                  onClick={triggerReset}
+                  className="font-mono text-xs p-3.5 text-black bg-[#ff007f] hover:bg-pink-400 font-bold border-2 border-black shadow-[3px_3px_0_#000] hover:translate-x-0.5 hover:translate-y-0.5 active:translate-y-1.5 active:translate-x-1.5 transition-all"
+                >
+                  Reset
+                </button>
+              </div>
+
+            </div>
+
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      </main>
+
+      {/* Cyber Sidebar Guide Overlay Drawer */}
+      <AnimatePresence>
+        {isInfoOpen && (
+          <>
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsInfoOpen(false)}
+              className="fixed inset-0 bg-black/80 z-40 backdrop-blur-xs cursor-pointer"
+            />
+
+            {/* Sidebar drawer panel */}
+            <motion.div
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className="fixed top-0 right-0 h-full w-full max-w-md bg-[#0e0514] border-l-4 border-black z-50 shadow-[0_0_50px_rgba(0,0,0,0.85)] flex flex-col overflow-y-auto"
+            >
+              {/* Drawer Header */}
+              <div className="bg-[#180a24] p-5 border-b-4 border-black flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Info className="text-[#00f3ff]" size={18} />
+                  <h2 className="font-sans text-sm font-bold text-white uppercase tracking-tight">
+                    Guide
+                  </h2>
+                </div>
+                <button
+                  onClick={() => {
+                    setIsInfoOpen(false);
+                    triggerAudioBeep(320, 'sine', 0.05);
+                  }}
+                  className="p-1 px-2 border-2 border-black bg-red-950 text-red-200 hover:bg-red-500 hover:text-white transition-all font-mono text-xs font-bold flex items-center gap-1"
+                >
+                  <X size={12} /> Close
+                </button>
+              </div>
+
+              {/* Drawer Content */}
+              <div className="p-6 space-y-6 flex-grow font-mono text-xs">
+                
+                {/* Section: Blinker Modes */}
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 border-b border-[#a855f7]/30 pb-1.5">
+                    <Sparkles className="text-[#d946ef]" size={13} />
+                    <h3 className="font-sans text-[11px] font-bold text-[#d946ef] uppercase tracking-wider">Modes</h3>
+                  </div>
+                  
+                  <div className="space-y-3">
+                    <div className="bg-black/40 p-3 border-2 border-black rounded-sm">
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-[#39ff14] font-bold uppercase">8 Seconds</span>
+                        <span className="bg-[#39ff14]/15 text-[#39ff14] border border-[#39ff14]/30 text-[9px] px-1.5 font-bold">1 Point</span>
+                      </div>
+                      <p className="text-slate-300 leading-relaxed text-[11px] font-sans">
+                        Draw continuously and release at 8 seconds to secure your point.
+                      </p>
+                    </div>
+
+                    <div className="bg-black/40 p-3 border-2 border-black rounded-sm">
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-[#00f3ff] font-bold uppercase">10 Seconds</span>
+                        <span className="bg-[#00f3ff]/15 text-[#00f3ff] border border-[#00f3ff]/30 text-[9px] px-1.5 font-bold">2 Points</span>
+                      </div>
+                      <p className="text-slate-300 leading-relaxed text-[11px] font-sans">
+                        Draw continuously and release at 10 seconds. Higher oil and battery use.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section: Controls */}
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 border-b border-[#a855f7]/30 pb-1.5">
+                    <Sparkles className="text-[#00f3ff]" size={13} />
+                    <h3 className="font-sans text-[11px] font-bold text-[#00f3ff] uppercase tracking-wider">Controls</h3>
+                  </div>
+                  <div className="bg-black/40 p-3.5 border-2 border-black rounded-sm">
+                    <span className="text-[#39ff14] font-bold block mb-1 uppercase">Tap to Play</span>
+                    <p className="text-slate-300 text-[11px] leading-relaxed font-sans">
+                      Simply tap the <span className="text-[#00f3ff] font-bold">"TAKE A BLINKER"</span> button to initiate inhalation and start drawing. When the timer reaches your exact target time (8.0s or 10.0s), tap the button again to successfully stop and lock in your score.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Section: Voltage adjustments explained */}
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 border-b border-[#a855f7]/30 pb-1.5">
+                    <Sparkles className="text-[#ffd700]" size={13} />
+                    <h3 className="font-sans text-[11px] font-bold text-[#ffd700] uppercase tracking-wider">Voltage</h3>
+                  </div>
+                  <div className="bg-black/30 p-3 border border-zinc-900/80 space-y-1.5">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="font-bold text-[#c084fc] flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-[#c084fc] border border-black/40" />
+                        <span>2.4V (Low)</span>
+                      </span>
+                      <span className="text-slate-500 font-bold">0.6x Drain Rate</span>
+                    </div>
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="font-bold text-[#34d399] flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-[#34d399] border border-black/40" />
+                        <span>3.2V (Standard)</span>
+                      </span>
+                      <span className="text-slate-500 font-bold">1.0x Drain Rate</span>
+                    </div>
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="font-bold text-[#f87171] flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-[#f87171] border border-black/40" />
+                        <span>4.0V (High)</span>
+                      </span>
+                      <span className="text-slate-500 font-bold">1.6x Drain Rate</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section: Multiplayer Rules */}
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 border-b border-[#a855f7]/30 pb-1.5">
+                    <Sparkles className="text-red-500" size={13} />
+                    <h3 className="font-sans text-[11px] font-bold text-red-400 uppercase tracking-wider">Rules</h3>
+                  </div>
+                  <div className="text-slate-300 leading-relaxed text-[11px] bg-[#1a0a0f] p-3 border border-red-950 rounded-sm space-y-2 font-sans">
+                    <p><strong>2 Players</strong>: If a player stops early, the game ends.</p>
+                    <p><strong>3-4 Players</strong>: When a player stops early, they are eliminated. The last remaining player wins.</p>
+                  </div>
+                </div>
+
+              </div>
+
+              {/* Drawer Footer */}
+              <div className="bg-[#12071a] p-4 border-t-4 border-black text-center">
+                <span className="text-[10px] text-slate-400 block mb-1">Developer Links</span>
+                <a 
+                  href="https://instagram.com/blinkergamefhs" 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  className="font-bold text-xs text-[#00f3ff] hover:underline"
+                >
+                  @blinkergamefhs
+                </a>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Modern Brutalist Footer */}
+      <footer className="w-full bg-[#11061c] border-t-4 border-black p-3.5 z-10 text-center font-mono text-[10px] text-slate-500 uppercase flex flex-col sm:flex-row items-center justify-between gap-2">
+        <span>Blinker Board © {new Date().getFullYear()}</span>
+        <div className="flex gap-2 items-center">
+          <span>Links:</span>
+          <a href="https://instagram.com/blinkergamefhs" target="_blank" rel="noopener noreferrer" className="hover:underline text-[#00f3ff] font-bold">
+            @blinkergamefhs
+          </a>
+        </div>
+      </footer>
+
+    </div>
+  );
+}

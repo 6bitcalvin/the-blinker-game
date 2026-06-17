@@ -1,0 +1,6 @@
+{
+  "name": "Blinker Game",
+  "description": "Competitive 'Blinker' (vape session) simulator in Neo-Brutalist 8-bit Cyberpunk style.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
