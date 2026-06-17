@@ -264,6 +264,40 @@ function playSynthBeep(freq: number, type: 'sine' | 'square' | 'sawtooth' | 'tri
   }
 }
 
+function playTactileClick() {
+  try {
+    initAudio();
+    if (!audioCtx) return;
+    const osc1 = audioCtx.createOscillator();
+    const osc2 = audioCtx.createOscillator();
+    const gainNode1 = audioCtx.createGain();
+    const gainNode2 = audioCtx.createGain();
+
+    osc1.type = 'triangle';
+    osc1.frequency.setValueAtTime(1100, audioCtx.currentTime);
+    osc1.frequency.exponentialRampToValueAtTime(70, audioCtx.currentTime + 0.012);
+    gainNode1.gain.setValueAtTime(0.12, audioCtx.currentTime);
+    gainNode1.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.012);
+
+    osc2.type = 'square';
+    osc2.frequency.setValueAtTime(160, audioCtx.currentTime);
+    gainNode2.gain.setValueAtTime(0.08, audioCtx.currentTime);
+    gainNode2.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.02);
+
+    osc1.connect(gainNode1);
+    gainNode1.connect(audioCtx.destination);
+    osc2.connect(gainNode2);
+    gainNode2.connect(audioCtx.destination);
+
+    osc1.start();
+    osc1.stop(audioCtx.currentTime + 0.02);
+    osc2.start();
+    osc2.stop(audioCtx.currentTime + 0.02);
+  } catch (e) {
+    console.warn("Tactile click blocked:", e);
+  }
+}
+
 function playSubtleClickHiss() {
   try {
     initAudio();
@@ -1637,7 +1671,12 @@ const BoutiqSVG = ({
   voltage, 
   isCompleted = false, 
   progress = 0,
-  playerName = 'DUAL-MIX'
+  playerName = 'DUAL-MIX',
+  selectedTank = 'both',
+  onToggleTank,
+  onClickButton,
+  customLeft = '',
+  customRight = ''
 }: { 
   isPulsing: boolean; 
   oilLevel?: number; 
@@ -1646,25 +1685,64 @@ const BoutiqSVG = ({
   isCompleted?: boolean; 
   progress?: number; 
   playerName?: string;
+  selectedTank?: 'both' | 'left' | 'right';
+  onToggleTank?: () => void;
+  onClickButton?: () => void;
+  customLeft?: string;
+  customRight?: string;
 }) => {
   const breathFactor = 0.5 + 0.5 * Math.sin(progress * Math.PI * 4);
 
-  // Layout calculations for 3 gold capsules (drain level)
-  const capsuleMaxLiquid = 24;
+  // Layout calculations for 2 detailed vertical twin oil tanks (liquid levels)
+  const capsuleMaxLiquid = 36;
   const capsuleLiquidHeight = capsuleMaxLiquid * oilLevel;
-  const capsuleLiquidY = 74 - capsuleLiquidHeight;
+  const capsuleLiquidY = 86 - capsuleLiquidHeight;
 
-  const skewValX = isPulsing ? `${(progress * 1.8).toFixed(2)}deg` : '0deg';
-  const skewValY = isPulsing ? `${(progress * 1.0).toFixed(2)}deg` : '0deg';
-  const glowVal = isPulsing ? `${(progress * 10).toFixed(1)}px` : '0px';
-  const animDuration = isPulsing ? `${(0.8 - progress * 0.55).toFixed(2)}s` : '0s';
+  const skewValX = isPulsing ? `${(progress * 1.5).toFixed(2)}deg` : '0deg';
+  const skewValY = isPulsing ? `${(progress * 0.8).toFixed(2)}deg` : '0deg';
+  const glowVal = isPulsing ? `${(progress * 12).toFixed(1)}px` : '0px';
+  const animDuration = isPulsing ? `${(0.8 - progress * 0.5).toFixed(2)}s` : '0s';
 
-  // 1 to 3 lightning bolts based on voltage
+  // Lightning bolts indicator reflecting voltage intensity
   const boltsCount = voltage <= 2.4 ? 1 : voltage <= 3.2 ? 2 : 3;
 
   // Compute player's specific color theme deterministically
   const themeIndex = getStringHash(playerName) % BOUTIQ_THEMES.length;
   const theme = BOUTIQ_THEMES[themeIndex];
+
+  // Active tank selection: switches dynamically during inhalation to simulate dual-core drawing, or manually set
+  const leftActive = selectedTank === 'both'
+    ? (isPulsing ? (breathFactor < 0.6) : true)
+    : (selectedTank === 'left');
+  
+  const rightActive = selectedTank === 'both'
+    ? (isPulsing ? (breathFactor > 0.4) : true)
+    : (selectedTank === 'right');
+
+  const getLeftLabel = () => {
+    if (customLeft) {
+      const parts = customLeft.trim().split(/\s+/);
+      return {
+        top: parts[0]?.toUpperCase() || '',
+        bot: parts.slice(1).join(' ').toUpperCase() || ''
+      };
+    }
+    return theme.flavors[0];
+  };
+
+  const getRightLabel = () => {
+    if (customRight) {
+      const parts = customRight.trim().split(/\s+/);
+      return {
+        top: parts[0]?.toUpperCase() || '',
+        bot: parts.slice(1).join(' ').toUpperCase() || ''
+      };
+    }
+    return theme.flavors[1];
+  };
+
+  const leftLabel = getLeftLabel();
+  const rightLabel = getRightLabel();
 
   return (
     <svg 
@@ -1680,319 +1758,426 @@ const BoutiqSVG = ({
       } as React.CSSProperties}
     >
       <defs>
-        {/* Luxury Gold gradient to match the premium branding */}
+        {/* Luxury brushed chrome gradient for the metal body highlights */}
+        <linearGradient id="bodyMetallicBezel" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor="#4b5563" />
+          <stop offset="20%" stopColor="#d1d5db" />
+          <stop offset="40%" stopColor="#f3f4f6" />
+          <stop offset="60%" stopColor="#e5e7eb" />
+          <stop offset="80%" stopColor="#9ca3af" />
+          <stop offset="100%" stopColor="#374151" />
+        </linearGradient>
+
+        {/* Premium Gold gradient for internal coil chimney posts & trim */}
         <linearGradient id="postGold" x1="0%" y1="0%" x2="100%" y2="0%">
           <stop offset="0%" stopColor="#8a6f27" />
           <stop offset="20%" stopColor="#ffd700" />
-          <stop offset="40%" stopColor="#fff3b0" />
-          <stop offset="60%" stopColor="#fdf6d2" />
+          <stop offset="50%" stopColor="#fff8d4" />
           <stop offset="80%" stopColor="#ffd700" />
           <stop offset="100%" stopColor="#5d4c1b" />
         </linearGradient>
 
-        {/* Dynamic randomized chassis body color gradient */}
+        <linearGradient id="screenglas" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor="#030107" />
+          <stop offset="30%" stopColor="#0a0518" />
+          <stop offset="70%" stopColor="#0d0720" />
+          <stop offset="100%" stopColor="#020104" />
+        </linearGradient>
+
+        {/* Dynamic chassis body color gradient */}
         <linearGradient id="boutiqChassisGrad" x1="0%" y1="0%" x2="100%" y2="100%">
           <stop offset="0%" stopColor={theme.chassis[0]} />
-          <stop offset="25%" stopColor={theme.chassis[1]} />
-          <stop offset="55%" stopColor={theme.chassis[2]} />
-          <stop offset="85%" stopColor={theme.chassis[3]} />
+          <stop offset="35%" stopColor={theme.chassis[1]} />
+          <stop offset="70%" stopColor={theme.chassis[2]} />
           <stop offset="100%" stopColor={theme.chassis[4]} />
         </linearGradient>
 
-        <linearGradient id="screenglas" x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%" stopColor="#04020a" />
-          <stop offset="30%" stopColor="#0a0518" />
-          <stop offset="70%" stopColor="#0d0720" />
-          <stop offset="100%" stopColor="#030107" />
-        </linearGradient>
-
-        {/* Breathtaking realistic amber honey-like viscous oil gradient */}
+        {/* Ultra-realistic liquid honey amber oil gradient */}
         <linearGradient id="boutiqOilGrad" x1="0%" y1="0%" x2="100%" y2="0%">
           <stop offset="0%" stopColor="#451a03" />
-          <stop offset="15%" stopColor="#d97706" />
-          <stop offset="50%" stopColor="#fbbf24" />
-          <stop offset="80%" stopColor="#f59e0b" />
-          <stop offset="100%" stopColor="#290b00" />
+          <stop offset="15%" stopColor="#ea580c" />
+          <stop offset="50%" stopColor="#f59e0b" />
+          <stop offset="85%" stopColor="#ca8a04" />
+          <stop offset="100%" stopColor="#1e0b00" />
         </linearGradient>
 
-        {/* 3D Volumetric lighting overhead gradient to lay over glass & oil */}
+        {/* Golden active core backlight glow */}
+        <radialGradient id="oilActiveGlow" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor="#ffd700" stopOpacity="0.8" />
+          <stop offset="60%" stopColor="#ea580c" stopOpacity="0.25" />
+          <stop offset="100%" stopColor="#000000" stopOpacity="0" />
+        </radialGradient>
+
+        {/* 3D Glass volumetric reflection shading */}
         <linearGradient id="capsuleGlassShade" x1="0%" y1="0%" x2="0%" y2="100%">
-          <stop offset="0%" stopColor="#ffffff" stopOpacity="0.45" />
-          <stop offset="25%" stopColor="#ffffff" stopOpacity="0.05" />
-          <stop offset="75%" stopColor="#000000" stopOpacity="0.12" />
-          <stop offset="100%" stopColor="#000000" stopOpacity="0.6" />
+          <stop offset="0%" stopColor="#ffffff" stopOpacity="0.55" />
+          <stop offset="18%" stopColor="#ffffff" stopOpacity="0.08" />
+          <stop offset="82%" stopColor="#000000" stopOpacity="0.1" />
+          <stop offset="100%" stopColor="#000000" stopOpacity="0.65" />
         </linearGradient>
 
-        {/* High detail screen matrix scanlines */}
-        <pattern id="screenScanlines" width="4" height="4" patternUnits="userSpaceOnUse">
-          <line x1="0" y1="0" x2="4" y2="0" stroke={theme.accent} strokeWidth="0.5" opacity="0.08" />
-          <line x1="0" y1="0" x2="0" y2="4" stroke={theme.accent} strokeWidth="0.5" opacity="0.04" />
+        {/* High detail screen matrix micro scanline overlay */}
+        <pattern id="screenScanlines" width="3" height="3" patternUnits="userSpaceOnUse">
+          <line x1="0" y1="0" x2="3" y2="0" stroke={theme.accent} strokeWidth="0.4" opacity="0.06" />
+          <line x1="0" y1="0" x2="0" y2="3" stroke={theme.accent} strokeWidth="0.4" opacity="0.03" />
         </pattern>
 
-        {/* Perfect Capsule Clipping Masks to restrict oil liquid strictly inside the tank bounds */}
-        <clipPath id="capsuleClip1">
-          <rect x="29" y="50" width="16" height="24" rx="8" />
+        {/* Precise clipping paths for Left and Right Twin Tanks */}
+        <clipPath id="twinTankClipLeft">
+          <rect x="27" y="50" width="29" height="36" rx="6" />
         </clipPath>
-        <clipPath id="capsuleClip2">
-          <rect x="52" y="50" width="16" height="24" rx="8" />
-        </clipPath>
-        <clipPath id="capsuleClip3">
-          <rect x="75" y="50" width="16" height="24" rx="8" />
+        <clipPath id="twinTankClipRight">
+          <rect x="64" y="50" width="29" height="36" rx="6" />
         </clipPath>
       </defs>
 
-      {/* Stout Dynamic Mouthpiece integrally designed into the curved chassis top */}
-      <path d="M 45,9 Q 60,3 75,9 L 75,32 L 45,32 Z" fill={theme.mouthpiece} stroke="#000" strokeWidth="2.5" />
-      <path d="M 50,13 L 70,13" stroke="#eedbff" strokeWidth="1.2" opacity="0.4" strokeLinecap="round" />
-      <rect x="45" y="28" width="30" height="4" fill="url(#postGold)" stroke="#000" strokeWidth="1" />
+      {/* Ergonomic curved wide black mouthpiece molded with gold rim */}
+      <path d="M 40,8 Q 60,-1 80,8 L 81,32 L 39,32 Z" fill="#18181b" stroke="#000" strokeWidth="2.5" />
+      <path d="M 44,13 C 52,9 68,9 76,13" stroke="#ffd700" strokeWidth="1" strokeLinecap="round" fill="none" opacity="0.7" />
+      <rect x="40" y="27" width="40" height="4.5" fill="url(#postGold)" stroke="#000" strokeWidth="1.2" />
 
-      {/* Stout Dynamic main body chassis */}
-      <rect x="15" y="32" width="90" height="155" rx="18" fill="url(#boutiqChassisGrad)" stroke="#000" strokeWidth="3" />
+      {/* Stout Matte Chassis Frame with premium bezel border */}
+      <rect x="14" y="32" width="92" height="157" rx="16" fill="url(#boutiqChassisGrad)" stroke="#000" strokeWidth="3" />
       
-      {/* 3D Chamfered metallic bezel stroke */}
-      <rect x="17" y="34" width="86" height="151" rx="16" fill="none" stroke="#e9d5ff" strokeWidth="1.2" opacity="0.45" />
+      {/* 3D Brushed metallic chamfer border */}
+      <rect x="16.5" y="34.5" width="87" height="152" rx="14" fill="none" stroke="url(#bodyMetallicBezel)" strokeWidth="1.8" opacity="0.9" />
+
+      {/* Side grip cooling ventilation slots */}
+      <rect x="10" y="70" width="4" height="60" rx="2" fill="#18181b" stroke="#000" strokeWidth="1" />
+      <rect x="106" y="70" width="4" height="60" rx="2" fill="#18181b" stroke="#000" strokeWidth="1" />
       
-      {/* Sleek corner protective screws */}
-      <circle cx="21" cy="38" r="1.5" fill="#1e1b4b" stroke="#000" strokeWidth="0.5" />
-      <circle cx="99" cy="38" r="1.5" fill="#1e1b4b" stroke="#000" strokeWidth="0.5" />
-      <circle cx="21" cy="181" r="1.5" fill="#1e1b4b" stroke="#000" strokeWidth="0.5" />
-      <circle cx="99" cy="181" r="1.5" fill="#1e1b4b" stroke="#000" strokeWidth="0.5" />
+      {/* Side grip lines inside vents */}
+      <line x1="11" y1="80" x2="13" y2="80" stroke="#ffd700" strokeWidth="0.8" opacity="0.5" />
+      <line x1="11" y1="90" x2="13" y2="90" stroke="#ffd700" strokeWidth="0.8" opacity="0.5" />
+      <line x1="11" y1="100" x2="13" y2="100" stroke="#ffd700" strokeWidth="0.8" opacity="0.5" />
+      <line x1="11" y1="110" x2="13" y2="110" stroke="#ffd700" strokeWidth="0.8" opacity="0.5" />
+      <line x1="11" y1="120" x2="13" y2="120" stroke="#ffd700" strokeWidth="0.8" opacity="0.5" />
 
-      {/* Front sleek glossy black screen board */}
-      <rect x="22" y="44" width="76" height="135" rx="10" fill="url(#screenglas)" stroke="#000" strokeWidth="2" />
-      <rect x="22" y="44" width="76" height="135" rx="10" fill="url(#screenScanlines)" pointerEvents="none" />
+      <line x1="107" y1="80" x2="109" y2="80" stroke="#ffd700" strokeWidth="0.8" opacity="0.5" />
+      <line x1="107" y1="90" x2="109" y2="90" stroke="#ffd700" strokeWidth="0.8" opacity="0.5" />
+      <line x1="107" y1="100" x2="109" y2="100" stroke="#ffd700" strokeWidth="0.8" opacity="0.5" />
+      <line x1="107" y1="110" x2="109" y2="110" stroke="#ffd700" strokeWidth="0.8" opacity="0.5" />
+      <line x1="107" y1="120" x2="109" y2="120" stroke="#ffd700" strokeWidth="0.8" opacity="0.5" />
 
-      {/* THREE GLASS CAPSULES: Gold Oil Chambers aligned horizontally */}
-      {/* Chamber 1 */}
+      {/* Hex-head industrial hardware screws in chassis corners */}
+      <g stroke="#000" strokeWidth="0.5" fill="#374151">
+        <circle cx="21" cy="39" r="2" /> <circle cx="99" cy="39" r="2" />
+        <circle cx="21" cy="181" r="2" /> <circle cx="99" cy="181" r="2" />
+        {/* Bolt details */}
+        <line x1="20" y1="39" x2="22" y2="39" stroke="#9ca3af" strokeWidth="0.5" />
+        <line x1="98" y1="39" x2="100" y2="39" stroke="#9ca3af" strokeWidth="0.5" />
+        <line x1="20" y1="181" x2="22" y2="181" stroke="#9ca3af" strokeWidth="0.5" />
+        <line x1="98" y1="181" x2="100" y2="181" stroke="#9ca3af" strokeWidth="0.5" />
+      </g>
+
+      {/* Front glossy curved black screen glass */}
+      <rect x="22" y="44" width="76" height="136" rx="10" fill="url(#screenglas)" stroke="#0a0515" strokeWidth="2.5" />
+      <rect x="22" y="44" width="76" height="136" rx="10" fill="url(#screenScanlines)" pointerEvents="none" />
+
+      {/* ================= TWIN OIL CHAMBERS (DUAL TANK DESIGN) ================= */}
+      
+      {/* --- TWIN TANK A (LEFT): INDICA / SUGAR --- */}
       <g>
-        {/* Container background */}
-        <rect x="29" y="50" width="16" height="24" rx="8" fill="#130822" stroke="url(#postGold)" strokeWidth="0.8" />
+        {/* Tank container border */}
+        <rect x="27" y="50" width="29" height="36" rx="6" fill="#100a1c" stroke="url(#postGold)" strokeWidth="1" />
         
-        {/* Clipped Golden Liquid & detail surface */}
-        <g clipPath="url(#capsuleClip1)">
+        {/* Warm golden backlight active halo when Left Core is drawing */}
+        {leftActive && isPulsing && (
+          <rect x="28" y="51" width="27" height="34" rx="5" fill="url(#oilActiveGlow)" opacity={0.65 + 0.3 * Math.sin(Date.now() / 150)} />
+        )}
+
+        {/* Centered Golden Brass heating pole assembly inside the tank */}
+        <rect x="39" y="50" width="5" height="36" fill="url(#postGold)" stroke="#3f2e04" strokeWidth="0.5" opacity="0.95" />
+        {/* Threaded screw pattern on the post */}
+        <line x1="39" y1="58" x2="44" y2="58" stroke="#312202" strokeWidth="0.5" />
+        <line x1="39" y1="66" x2="44" y2="66" stroke="#312202" strokeWidth="0.5" />
+        <line x1="39" y1="74" x2="44" y2="74" stroke="#312202" strokeWidth="0.5" />
+        <circle cx="41.5" cy="80" r="1.2" fill="#18181b" stroke="url(#postGold)" strokeWidth="0.5" /> {/* Intake hole */}
+
+        {/* Golden Honey Oil Fluid Layer clip */}
+        <g clipPath="url(#twinTankClipLeft)">
           {capsuleLiquidHeight > 0 && (
             <>
-              <rect x="29" y={capsuleLiquidY} width="16" height={capsuleLiquidHeight} fill="url(#boutiqOilGrad)" opacity="0.96" />
-              {/* Curved surface meniscus */}
-              <ellipse cx="37" cy={capsuleLiquidY} rx="8" ry="1.5" fill="#fef08a" opacity="0.8" />
-              <ellipse cx="37" cy={capsuleLiquidY + 0.6} rx="6" ry="1" fill="#ffffff" opacity="0.55" />
+              <rect x="27" y={capsuleLiquidY} width="29" height={capsuleLiquidHeight} fill="url(#boutiqOilGrad)" opacity="0.95" />
+              {/* Detailed volumetric fluid meniscus curve */}
+              <ellipse cx="41.5" cy={capsuleLiquidY} rx="14.5" ry="2.2" fill="#ffd700" opacity="0.85" />
+              <ellipse cx="41.5" cy={capsuleLiquidY + 0.8} rx="11" ry="1.2" fill="#ffffff" opacity="0.65" />
               
-              {/* Dynamic slow floating micro bubbles */}
-              <circle cx="33" cy={capsuleLiquidY + (capsuleLiquidHeight * 0.75)} r="0.6" fill="#ffffff" opacity="0.8" />
-              <circle cx="41" cy={capsuleLiquidY + (capsuleLiquidHeight * 0.3)} r="0.4" fill="#ffffff" opacity="0.7" />
-              <circle cx="36" cy={capsuleLiquidY + (capsuleLiquidHeight * 0.52)} r="0.8" fill="url(#postGold)" opacity="0.85" />
-              {isPulsing && (
-                <circle cx="34" cy={capsuleLiquidY + (capsuleLiquidHeight * 0.45) - (progress * 4)} r="0.5" fill="#ffffff" />
+              {/* Realistic floating micro bubbles inside the viscous oil */}
+              <circle cx="33" cy={capsuleLiquidY + (capsuleLiquidHeight * 0.72)} r="0.8" fill="#ffffff" opacity="0.85" />
+              <circle cx="31" cy={capsuleLiquidY + (capsuleLiquidHeight * 0.38)} r="0.5" fill="#ffffff" opacity="0.75" />
+              <circle cx="36" cy={capsuleLiquidY + (capsuleLiquidHeight * 0.5)} r="1.2" fill="url(#postGold)" opacity="0.9" />
+              <circle cx="49" cy={capsuleLiquidY + (capsuleLiquidHeight * 0.65)} r="0.7" fill="#ffffff" opacity="0.8" />
+              <circle cx="47" cy={capsuleLiquidY + (capsuleLiquidHeight * 0.24)} r="1.0" fill="url(#postGold)" opacity="0.8" />
+
+              {/* Bubbles rising actively if core is drawing */}
+              {isPulsing && leftActive && (
+                <g>
+                  <circle cx="35" cy={capsuleLiquidY + (capsuleLiquidHeight * 0.6) - (progress * 18)} r="0.8" fill="#ffffff" className="animate-pulse" />
+                  <circle cx="46" cy={capsuleLiquidY + (capsuleLiquidHeight * 0.42) - (progress * 24)} r="1.0" fill="#ffffff" />
+                  <circle cx="40" cy={capsuleLiquidY + (capsuleLiquidHeight * 0.28) - (progress * 14)} r="0.6" fill="#ffffff" />
+                </g>
               )}
             </>
           )}
         </g>
         
-        {/* Real 3D Glass highlights overhead overlay */}
-        <rect x="29" y="50" width="16" height="24" rx="8" fill="url(#capsuleGlassShade)" pointerEvents="none" opacity="0.85" />
-        <rect x="30.5" y="51.5" width="2" height="21" rx="1" fill="#ffffff" opacity="0.32" pointerEvents="none" />
-        
-        {/* Tick scale metrics */}
-        <line x1="29" y1="56" x2="31" y2="56" stroke="url(#postGold)" strokeWidth="0.5" opacity="0.5" />
-        <line x1="29" y1="62" x2="31" y2="62" stroke="url(#postGold)" strokeWidth="0.5" opacity="0.5" />
-        <line x1="29" y1="68" x2="31" y2="68" stroke="url(#postGold)" strokeWidth="0.5" opacity="0.5" />
+        {/* Real Glass Reflections & 3D Lighting Overlay */}
+        <rect x="27" y="50" width="29" height="36" rx="6" fill="url(#capsuleGlassShade)" pointerEvents="none" opacity="0.85" />
+        <rect x="29" y="51.5" width="3" height="33" rx="1.5" fill="#ffffff" opacity="0.32" pointerEvents="none" />
+        <rect x="50" y="51.5" width="1.5" height="33" rx="0.5" fill="#000000" opacity="0.25" pointerEvents="none" />
+
+        {/* Tank A fluid scale markings */}
+        <line x1="27" y1="59" x2="30" y2="59" stroke="#ffd700" strokeWidth="0.8" opacity="0.6" />
+        <line x1="27" y1="68" x2="30" y2="68" stroke="#ffd700" strokeWidth="0.8" opacity="0.6" />
+        <line x1="27" y1="77" x2="30" y2="77" stroke="#ffd700" strokeWidth="0.8" opacity="0.6" />
       </g>
-      
-      {/* Chamber 2 */}
+
+      {/* --- TWIN TANK B (RIGHT): SATIVA / CAKE --- */}
       <g>
-        <rect x="52" y="50" width="16" height="24" rx="8" fill="#130822" stroke="url(#postGold)" strokeWidth="0.8" />
+        {/* Tank container border */}
+        <rect x="64" y="50" width="29" height="36" rx="6" fill="#100a1c" stroke="url(#postGold)" strokeWidth="1" />
         
-        <g clipPath="url(#capsuleClip2)">
+        {/* Warm golden backlight active halo when Right Core is drawing */}
+        {rightActive && isPulsing && (
+          <rect x="65" y="51" width="27" height="34" rx="5" fill="url(#oilActiveGlow)" opacity={0.65 + 0.3 * Math.sin(Date.now() / 150 + 10)} />
+        )}
+
+        {/* Centered Golden Brass heating pole assembly inside the tank */}
+        <rect x="76" y="50" width="5" height="36" fill="url(#postGold)" stroke="#3f2e04" strokeWidth="0.5" opacity="0.95" />
+        {/* Threaded screw pattern on the post */}
+        <line x1="76" y1="58" x2="81" y2="58" stroke="#312202" strokeWidth="0.5" />
+        <line x1="76" y1="66" x2="81" y2="66" stroke="#312202" strokeWidth="0.5" />
+        <line x1="76" y1="74" x2="81" y2="74" stroke="#312202" strokeWidth="0.5" />
+        <circle cx="78.5" cy="80" r="1.2" fill="#18181b" stroke="url(#postGold)" strokeWidth="0.5" /> {/* Intake hole */}
+
+        {/* Golden Honey Oil Fluid Layer clip */}
+        <g clipPath="url(#twinTankClipRight)">
           {capsuleLiquidHeight > 0 && (
             <>
-              <rect x="52" y={capsuleLiquidY} width="16" height={capsuleLiquidHeight} fill="url(#boutiqOilGrad)" opacity="0.96" />
-              <ellipse cx="60" cy={capsuleLiquidY} rx="8" ry="1.5" fill="#fef08a" opacity="0.8" />
-              <ellipse cx="60" cy={capsuleLiquidY + 0.6} rx="6" ry="1" fill="#ffffff" opacity="0.55" />
+              <rect x="64" y={capsuleLiquidY} width="29" height={capsuleLiquidHeight} fill="url(#boutiqOilGrad)" opacity="0.95" />
+              {/* Detailed volumetric fluid meniscus curve */}
+              <ellipse cx="78.5" cy={capsuleLiquidY} rx="14.5" ry="2.2" fill="#ffd700" opacity="0.85" />
+              <ellipse cx="78.5" cy={capsuleLiquidY + 0.8} rx="11" ry="1.2" fill="#ffffff" opacity="0.65" />
               
-              <circle cx="56" cy={capsuleLiquidY + (capsuleLiquidHeight * 0.68)} r="0.6" fill="#ffffff" opacity="0.85" />
-              <circle cx="63" cy={capsuleLiquidY + (capsuleLiquidHeight * 0.45)} r="0.4" fill="#ffffff" opacity="0.75" />
-              <circle cx="59" cy={capsuleLiquidY + (capsuleLiquidHeight * 0.22)} r="0.7" fill="url(#postGold)" opacity="0.9" />
-              {isPulsing && (
-                <circle cx="58" cy={capsuleLiquidY + (capsuleLiquidHeight * 0.55) - (progress * 5)} r="0.5" fill="#ffffff" />
+              {/* Realistic floating micro bubbles inside the viscous oil */}
+              <circle cx="70" cy={capsuleLiquidY + (capsuleLiquidHeight * 0.65)} r="0.9" fill="url(#postGold)" opacity="0.8" />
+              <circle cx="83" cy={capsuleLiquidY + (capsuleLiquidHeight * 0.44)} r="0.6" fill="#ffffff" opacity="0.8" />
+              <circle cx="85" cy={capsuleLiquidY + (capsuleLiquidHeight * 0.72)} r="1.1" fill="url(#postGold)" opacity="0.85" />
+              <circle cx="68" cy={capsuleLiquidY + (capsuleLiquidHeight * 0.18)} r="0.5" fill="#ffffff" opacity="0.75" />
+              <circle cx="73" cy={capsuleLiquidY + (capsuleLiquidHeight * 0.52)} r="0.8" fill="#ffffff" opacity="0.85" />
+
+              {/* Bubbles rising actively if core is drawing */}
+              {isPulsing && rightActive && (
+                <g>
+                  <circle cx="71" cy={capsuleLiquidY + (capsuleLiquidHeight * 0.5) - (progress * 22)} r="0.7" fill="#ffffff" />
+                  <circle cx="82" cy={capsuleLiquidY + (capsuleLiquidHeight * 0.35) - (progress * 15)} r="1.1" fill="#ffffff" />
+                  <circle cx="78" cy={capsuleLiquidY + (capsuleLiquidHeight * 0.58) - (progress * 26)} r="0.8" fill="#ffffff" />
+                </g>
               )}
             </>
           )}
         </g>
         
-        <rect x="52" y="50" width="16" height="24" rx="8" fill="url(#capsuleGlassShade)" pointerEvents="none" opacity="0.85" />
-        <rect x="53.5" y="51.5" width="2" height="21" rx="1" fill="#ffffff" opacity="0.32" pointerEvents="none" />
-        
-        <line x1="52" y1="56" x2="54" y2="56" stroke="url(#postGold)" strokeWidth="0.5" opacity="0.5" />
-        <line x1="52" y1="62" x2="54" y2="62" stroke="url(#postGold)" strokeWidth="0.5" opacity="0.5" />
-        <line x1="52" y1="68" x2="54" y2="68" stroke="url(#postGold)" strokeWidth="0.5" opacity="0.5" />
+        {/* Real Glass Reflections & 3D Lighting Overlay */}
+        <rect x="64" y="50" width="29" height="36" rx="6" fill="url(#capsuleGlassShade)" pointerEvents="none" opacity="0.85" />
+        <rect x="66" y="51.5" width="3" height="33" rx="1.5" fill="#ffffff" opacity="0.32" pointerEvents="none" />
+        <rect x="87" y="51.5" width="1.5" height="33" rx="0.5" fill="#000000" opacity="0.25" pointerEvents="none" />
+
+        {/* Tank B fluid scale markings */}
+        <line x1="90" y1="59" x2="93" y2="59" stroke="#ffd700" strokeWidth="0.8" opacity="0.6" />
+        <line x1="90" y1="68" x2="93" y2="68" stroke="#ffd700" strokeWidth="0.8" opacity="0.6" />
+        <line x1="90" y1="77" x2="93" y2="77" stroke="#ffd700" strokeWidth="0.8" opacity="0.6" />
       </g>
 
-      {/* Chamber 3 */}
-      <g>
-        <rect x="75" y="50" width="16" height="24" rx="8" fill="#130822" stroke="url(#postGold)" strokeWidth="0.8" />
-        
-        <g clipPath="url(#capsuleClip3)">
-          {capsuleLiquidHeight > 0 && (
-            <>
-              <rect x="75" y={capsuleLiquidY} width="16" height={capsuleLiquidHeight} fill="url(#boutiqOilGrad)" opacity="0.96" />
-              <ellipse cx="83" cy={capsuleLiquidY} rx="8" ry="1.5" fill="#fef08a" opacity="0.8" />
-              <ellipse cx="83" cy={capsuleLiquidY + 0.6} rx="6" ry="1" fill="#ffffff" opacity="0.55" />
-              
-              <circle cx="79" cy={capsuleLiquidY + (capsuleLiquidHeight * 0.7)} r="0.6" fill="#ffffff" opacity="0.8" />
-              <circle cx="85" cy={capsuleLiquidY + (capsuleLiquidHeight * 0.35)} r="0.4" fill="#ffffff" opacity="0.7" />
-              <circle cx="81" cy={capsuleLiquidY + (capsuleLiquidHeight * 0.58)} r="0.8" fill="url(#postGold)" opacity="0.85" />
-              {isPulsing && (
-                <circle cx="82" cy={capsuleLiquidY + (capsuleLiquidHeight * 0.4) - (progress * 4)} r="0.5" fill="#ffffff" />
-              )}
-            </>
-          )}
+      {/* --- CENTRAL DUAL CHAMBER BRAND & SELECTOR STATUS --- */}
+      <g id="boutiq-svg-plaque">
+        {/* Strain labels under respective tanks */}
+        <g transform="translate(41.5, 93)">
+          <text x="0" y="0" fontSize="3.6" fontFamily="'Share Tech Mono', monospace" fill="#ffffff" fontWeight="bold" textAnchor="middle">{leftLabel.top}</text>
+          <text x="0" y="3.6" fontSize="3.6" fontFamily="'Share Tech Mono', monospace" fill={theme.accent} fontWeight="bold" textAnchor="middle">{leftLabel.bot}</text>
+          {/* Left LED selection arrow pointing up */}
+          <polygon points="-1.5,8 0,6 1.5,8" fill={leftActive ? "#39ff14" : "#451a03"} opacity={leftActive ? 1 : 0.4} className={isPulsing && leftActive ? "animate-pulse" : ""} />
+          <circle cx="0" cy="11" r="1.2" fill={leftActive ? "#39ff14" : "#221005"} />
         </g>
-        
-        <rect x="75" y="50" width="16" height="24" rx="8" fill="url(#capsuleGlassShade)" pointerEvents="none" opacity="0.85" />
-        <rect x="76.5" y="51.5" width="2" height="21" rx="1" fill="#ffffff" opacity="0.32" pointerEvents="none" />
-        
-        <line x1="75" y1="56" x2="77" y2="56" stroke="url(#postGold)" strokeWidth="0.5" opacity="0.5" />
-        <line x1="75" y1="62" x2="77" y2="62" stroke="url(#postGold)" strokeWidth="0.5" opacity="0.5" />
-        <line x1="75" y1="68" x2="77" y2="68" stroke="url(#postGold)" strokeWidth="0.5" opacity="0.5" />
+
+        <g transform="translate(78.5, 93)">
+          <text x="0" y="0" fontSize="3.6" fontFamily="'Share Tech Mono', monospace" fill="#ffffff" fontWeight="bold" textAnchor="middle">{rightLabel.top}</text>
+          <text x="0" y="3.6" fontSize="3.6" fontFamily="'Share Tech Mono', monospace" fill={theme.accent} fontWeight="bold" textAnchor="middle">{rightLabel.bot}</text>
+          {/* Right LED selection arrow pointing up */}
+          <polygon points="-1.5,8 0,6 1.5,8" fill={rightActive ? "#39ff14" : "#451a03"} opacity={rightActive ? 1 : 0.4} className={isPulsing && rightActive ? "animate-pulse" : ""} />
+          <circle cx="0" cy="11" r="1.2" fill={rightActive ? "#39ff14" : "#221005"} />
+        </g>
       </g>
 
-      {/* FLAVORS LIST: Vertical columns or stacked names with red hand pointer indicators */}
-      {/* Column 1 */}
-      <g transform="translate(34, 88)">
-        <text x="0" y="0" fontSize="3.2" fontFamily="'Share Tech Mono', monospace" fill="#ffffff" fontWeight="bold" textAnchor="middle">{theme.flavors[0].top}</text>
-        <text x="0" y="3.5" fontSize="3.2" fontFamily="'Share Tech Mono', monospace" fill="#ffffff" fontWeight="bold" textAnchor="middle">{theme.flavors[0].bot}</text>
-        {/* Pink Selection Finger Hand pointing up */}
-        <path d="M -1.5,10.5 L 0,8 L 1.5,10.5 L 1.5,13.5 L -1.5,13.5 Z M -0.5,11.5 L -0.5,9.5 L 0.5,9.5 L 0.5,11.5 Z" fill="#ff007f" opacity={isPulsing && (voltage <= 2.4) ? 1 : 0.4} />
-      </g>
+      {/* Header horizontal divider */}
+      <line x1="28" y1="108" x2="92" y2="108" stroke="#1f1635" strokeWidth="0.8" />
 
-      {/* Column 2 */}
-      <g transform="translate(60, 88)">
-        <text x="0" y="0" fontSize="3.2" fontFamily="'Share Tech Mono', monospace" fill="#ffffff" fontWeight="bold" textAnchor="middle">{theme.flavors[1].top}</text>
-        <text x="0" y="3.5" fontSize="3.2" fontFamily="'Share Tech Mono', monospace" fill="#ffffff" fontWeight="bold" textAnchor="middle">{theme.flavors[1].bot}</text>
-        {/* Pink Selection Finger Hand pointing up */}
-        <path d="M -1.5,10.5 L 0,8 L 1.5,10.5 L 1.5,13.5 L -1.5,13.5 Z M -0.5,11.5 L -0.5,9.5 L 0.5,9.5 L 0.5,11.5 Z" fill="#ff007f" opacity={!isPulsing || (voltage > 2.4 && voltage < 4.0) ? 1 : 0.4} />
-      </g>
-
-      {/* Column 3 */}
-      <g transform="translate(86, 88)">
-        <text x="0" y="0" fontSize="3.2" fontFamily="'Share Tech Mono', monospace" fill="#ffffff" fontWeight="bold" textAnchor="middle">{theme.flavors[2].top}</text>
-        <text x="0" y="3.5" fontSize="3.2" fontFamily="'Share Tech Mono', monospace" fill="#ffffff" fontWeight="bold" textAnchor="middle">{theme.flavors[2].bot}</text>
-        {/* Pink Selection Finger Hand pointing up */}
-        <path d="M -1.5,10.5 L 0,8 L 1.5,10.5 L 1.5,13.5 L -1.5,13.5 Z M -0.5,11.5 L -0.5,9.5 L 0.5,9.5 L 0.5,11.5 Z" fill="#ff007f" opacity={isPulsing && (voltage >= 4.0) ? 1 : 0.4} />
-      </g>
-
-      {/* Header section separator for digital diagnostics */}
-      <line x1="28" y1="105" x2="92" y2="105" stroke="#1f1635" strokeWidth="0.8" />
-
-      {/* DIAGNOSTICS ROW (BATT % + CHARACTER MASCOT + BLINKERS MATRIX) */}
+      {/* ================= DIAGNOSTICS SMART SCREEN PANEL ================= */}
       
       {/* 1. SECURE METRICS: BATT Level + Volts Lightning (Left) */}
-      <g transform="translate(24, 110)">
-        <text x="3" y="5" fontSize="3.5" fontFamily="'Share Tech Mono', monospace" fill="#a78bfa" opacity="0.8">POWER</text>
-        <text x="3" y="11" fontSize="6" fontFamily="'Share Tech Mono', monospace" fill="#00f3ff" fontWeight="bold">
+      <g transform="translate(25, 112)">
+        <text x="3" y="5" fontSize="3.5" fontFamily="'Share Tech Mono', monospace" fill="#93c5fd" opacity="0.8" fontWeight="bold">POWER</text>
+        <text x="3" y="11" fontSize="6.5" fontFamily="'Share Tech Mono', monospace" fill="#00f3ff" fontWeight="bold">
           {Math.round(batteryLevel * 100)}%
         </text>
         
-        {/* Dynamic Voltage status line */}
-        <text x="3" y="18" fontSize="3.5" fontFamily="'Share Tech Mono', monospace" fill="#39ff14" fontWeight="bold">
+        {/* Active Volts level selector */}
+        <text x="3" y="18.5" fontSize="4.0" fontFamily="'Share Tech Mono', monospace" fill="#39ff14" fontWeight="bold">
           {voltage.toFixed(1)}V
         </text>
-        <g stroke="#39ff14" strokeWidth="0.8" fill="none" opacity="0.9">
-          {boltsCount >= 1 && <path d="M 19,13 L 23,13 L 21,15 L 24,15 L 20,18" strokeWidth="0.8" />}
-          {boltsCount >= 2 && <path d="M 23,13 L 27,13 L 25,15 L 28,15 L 24,18" strokeWidth="0.8" />}
+        <g stroke="#39ff14" strokeWidth="1" fill="none" opacity="0.95">
+          {boltsCount >= 1 && <path d="M 17,13.5 L 21,13.5 L 19,15.5 L 22,15.5 L 18,18.5" />}
+          {boltsCount >= 2 && <path d="M 21,13.5 L 25,13.5 L 23,15.5 L 26,15.5 L 22,18.5" />}
         </g>
       </g>
 
-      {/* 2. Character Mascot Face blowing clouds (Center) */}
-      <g transform="translate(60, 119)" className={isPulsing ? "animate-bounce" : ""}>
-        {/* Little circular green background */}
-        <circle cx="0" cy="4" r="8" fill="#141c10" stroke="#22c55e" strokeWidth="0.8" opacity="0.6" />
+      {/* 2. Character Mascot Face blowing clouds (Center Screen) */}
+      <g transform="translate(60, 121)" className={isPulsing ? "animate-bounce" : ""}>
+        {/* Little circular glass HUD circle */}
+        <circle cx="0" cy="4" r="8.5" fill="#0a1205" stroke="#22c55e" strokeWidth="0.8" opacity="0.7" />
         
-        {/* Pixel style head/hair */}
-        <rect x="-4" y="-3" width="8" height="3" rx="1.5" fill="#22c55e" />
-        <rect x="-6" y="-2" width="2" height="2" fill="#22c55e" />
-        <rect x="4" y="-2" width="2" height="2" fill="#22c55e" />
-        {/* Face */}
-        <rect x="-3.5" y="0" width="7" height="6.5" rx="1" fill="#4ade80" />
-        {/* Angry eyes */}
-        <rect x="-2" y="1.5" width="1.2" height="1" fill="#000" />
-        <rect x="0.8" y="1.5" width="1.2" height="1" fill="#000" />
-        {/* Eye brows */}
-        <path d="M-2.5,1 L-1.5,1.5 M2.5,1 L1.5,1.5" stroke="#15803d" strokeWidth="0.8" />
-        {/* Squashed red glowing puffing nose */}
-        <circle cx="0" cy="3.2" r="1.2" fill="#f87171" className={isPulsing ? "animate-pulse" : ""} />
-        {/* Mouth/Pipe puff details */}
-        <rect x="-1" y="4.5" width="2" height="1" fill="#000" />
+        {/* Pixel style character head */}
+        <rect x="-4" y="-3.2" width="8" height="3.5" rx="1" fill="#22c55e" />
+        <rect x="-6.2" y="-2" width="2.4" height="2" fill="#15803d" />
+        <rect x="3.8" y="-2" width="2.4" height="2" fill="#15803d" />
+        {/* Face plate */}
+        <rect x="-3.5" y="0.2" width="7" height="6.5" rx="1.5" fill="#4ade80" />
+        {/* Angry pixel eyes looking down */}
+        <rect x="-2" y="1.8" width="1.3" height="1" fill="#000" />
+        <rect x="0.7" y="1.8" width="1.3" height="1" fill="#000" />
+        {/* Intense eyebrows */}
+        <path d="M-2.5,1.2 L-1,2.0 M2.5,1.2 L1,2.0" stroke="#15803d" strokeWidth="0.8" />
+        {/* Glowing cherry puff nose */}
+        <circle cx="0" cy="3.6" r="1.5" fill="#ef4444" className={isPulsing ? "animate-pulse" : ""} />
+        {/* Mouth connector pipe */}
+        <rect x="-1" y="5.0" width="2" height="1.2" fill="#022c22" />
 
-        {/* Steaming Clouds rising out of cheeks/ears if pulsing */}
+        {/* Steaming side cloud jets popping when drawing */}
         {isPulsing && (
           <g>
-            <path d="M -6,2 Q -12,0 -9,-4 Q -6,-8 -3,-4 Z" fill="#ffffff" opacity="0.65" className="animate-pulse" />
-            <path d="M 6,2 Q 12,0 9,-4 Q 6,-8 3,-4 Z" fill="#ffffff" opacity="0.65" className="animate-pulse" />
+            <path d="M -6,1.5 Q -13,-0.5 -10,-5 Q -6,-8.5 -2.5,-4.5 Z" fill="#ffffff" opacity="0.75" className="animate-pulse" />
+            <path d="M 6,1.5 Q 13,-0.5 10,-5 Q 6,-8.5 2.5,-4.5 Z" fill="#ffffff" opacity="0.75" className="animate-pulse" />
           </g>
         )}
       </g>
 
-      {/* 3. BLINKERS status matrix (Right) */}
-      <g transform="translate(85, 110)">
-        <text x="1" y="5" fontSize="3.5" fontFamily="'Share Tech Mono', monospace" fill="#ffd700" fontWeight="bold">BLINKERS</text>
-        {/* Pixel 3x3 LED board */}
+      {/* 3. BLINKERS status matrix (Right Screen) */}
+      <g transform="translate(84, 112)">
+        <text x="1.5" y="5" fontSize="3.5" fontFamily="'Share Tech Mono', monospace" fill="#ffd700" fontWeight="bold">BLINKERS</text>
+        {/* Pixel 3x3 high-tech LED matrix dashboard */}
         <g fill={isPulsing ? "#ffd700" : "#241d08"} strokeWidth="0.5" stroke="none">
-          <rect x="2" y="7" width="3.5" height="2.5" className={isPulsing && (breathFactor > 0.3) ? "animate-pulse" : ""} fill={isPulsing && (breathFactor > 0.1) ? "#39ff14" : "#132c10"} />
-          <rect x="7" y="7" width="3.5" height="2.5" className={isPulsing && (breathFactor > 0.5) ? "animate-pulse" : ""} fill={isPulsing && (breathFactor > 0.4) ? "#39ff14" : "#132c10"} />
-          <rect x="12" y="7" width="3.5" height="2.5" className={isPulsing && (breathFactor > 0.7) ? "animate-pulse" : ""} fill={isPulsing && (breathFactor > 0.7) ? "#39ff14" : "#132c10"} />
+          <rect x="2" y="7" width="4" height="3" className={isPulsing && (breathFactor > 0.3) ? "animate-pulse" : ""} fill={isPulsing && (breathFactor > 0.1) ? "#39ff14" : "#132c10"} />
+          <rect x="7" y="7" width="4" height="3" className={isPulsing && (breathFactor > 0.5) ? "animate-pulse" : ""} fill={isPulsing && (breathFactor > 0.45) ? "#39ff14" : "#132c10"} />
+          <rect x="12" y="7" width="4" height="3" className={isPulsing && (breathFactor > 0.7) ? "animate-pulse" : ""} fill={isPulsing && (breathFactor > 0.7) ? "#39ff14" : "#132c10"} />
           
-          <rect x="2" y="10.5" width="3.5" height="2.5" fill={isPulsing ? "#39ff14" : "#132c10"} />
-          <rect x="7" y="10.5" width="3.5" height="2.5" fill={isCompleted ? "#ffd700" : "#132c10"} />
-          <rect x="12" y="10.5" width="3.5" height="2.5" fill={isPulsing ? "#39ff14" : "#132c10"} />
+          <rect x="2" y="11" width="4" height="3" fill={isPulsing ? "#39ff14" : "#132c10"} />
+          <rect x="7" y="11" width="4" height="3" fill={isCompleted ? "#ffd700" : "#132c10"} />
+          <rect x="12" y="11" width="4" height="3" fill={isPulsing ? "#39ff14" : "#132c10"} />
           
-          <rect x="2" y="14" width="3.5" height="2.5" fill={isPulsing ? "#39ff14" : "#132c10"} />
-          <rect x="7" y="14" width="3.5" height="2.5" fill={isPulsing ? "#39ff14" : "#132c10"} />
-          <rect x="12" y="14" width="3.5" height="2.5" fill={isPulsing ? "#10b981" : "#132c10"} />
+          <rect x="2" y="15" width="4" height="3" fill={isPulsing ? "#39ff14" : "#132c10"} />
+          <rect x="7" y="15" width="4" height="3" fill={isPulsing ? "#ff007f" : "#132c10"} />
+          <rect x="12" y="15" width="4" height="3" fill={isPulsing ? "#10b981" : "#132c10"} />
         </g>
       </g>
 
-      {/* OSCILLOSCOPE MONITOR: Live Sinewave rendering on draw */}
-      <g transform="translate(26, 138)">
-        <text x="2" y="4" fontSize="3" fontFamily="monospace" fill="#7c3aed" opacity="0.6">CORE TEMP</text>
+      {/* CORE TEMPERATURE OSCILLOSCOPE MONITOR SECTION */}
+      <g transform="translate(26, 140)">
+        <text x="2" y="4.2" fontSize="3.5" fontFamily="'Share Tech Mono', monospace" fill="#a78bfa" opacity="0.8">CORE LEVEL</text>
+        {/* Dynamic oscilloscope wave */}
         <path 
           d={isPulsing 
-            ? `M 0,11 Q 12,${11 - breathFactor * 14} 24,${11 + breathFactor * 14} T 48,11 T 66,11` 
-            : `M 0,11 Q 16,${11 - Math.sin(Date.now() / 300) * 2} 32,11 T 66,11`
+            ? `M 0,11 Q 12,${11 - breathFactor * 13} 24,${11 + breathFactor * 13} T 48,11 T 66,11` 
+            : `M 0,11 Q 16,${11 - Math.sin(Date.now() / 250) * 1.5} 32,11 T 66,11`
           } 
           fill="none" 
-          stroke={isPulsing ? "#a78bfa" : "#3b1e70"} 
-          strokeWidth="1" 
-          opacity="0.9" 
+          stroke={isPulsing ? "#39ff14" : "#4c1d95"} 
+          strokeWidth="1.2" 
+          opacity="0.95" 
         />
-        <text x="48" y="4" fontSize="3.2" fontFamily="monospace" fill="#39ff14" opacity="0.8" className={isPulsing ? "animate-pulse" : ""}>
-          {isPulsing ? "SYS ACTIVE" : "STANDBY"}
+        <text x="44" y="4.2" fontSize="3.5" fontFamily="'Share Tech Mono', monospace" fill="#e879f9" opacity="0.9" className={isPulsing ? "animate-pulse" : ""}>
+          {isPulsing ? "DRAWING..." : "STANDBY"}
         </text>
       </g>
 
-      {/* Premium detailed mechanical slider switch at bottom */}
-      <g transform="translate(60, 163)">
-        {/* Slider track */}
-        <rect x="-20" y="-3" width="40" height="6" rx="3" fill="#1e1b4b" stroke="#4338ca" strokeWidth="0.8" />
-        {/* Sliding contact block */}
-        <rect 
-          x={isPulsing ? (breathFactor > 0.5 ? "8" : "-16") : "-4"} 
-          y="-5" 
-          width="8" 
-          height="10" 
-          rx="1.5" 
+      {/* Premium Embossed Brand stamp "BOUTIQ" */}
+      <g transform="translate(60, 153)">
+        {/* Glowing gold text with elegant display font styling */}
+        <text x="0" y="0" fontSize="7.0" fontFamily="'Share Tech Mono', monospace" fill="url(#postGold)" fontWeight="900" letterSpacing="1.2" textAnchor="middle" filter={isPulsing ? "drop-shadow(0px 0px 4px rgba(255, 215, 0, 0.45))" : ""}>BOUTIQ</text>
+      </g>
+
+      {/* 3D Tactile Golden Firing Button */}
+      <g 
+        transform="translate(60, 163)" 
+        className="boutiq-svg-button cursor-pointer" 
+        onClick={onClickButton}
+        style={{ cursor: "pointer" }}
+      >
+        {/* Outer backing metal bezel ring */}
+        <circle cx="0" cy="0" r="6.2" fill="#1e1b4b" stroke="#000" strokeWidth="1.2" />
+        <circle cx="0" cy="0" r="5.0" fill="url(#bodyMetallicBezel)" />
+        {/* Inner golden button that glows/pulses when inhaling */}
+        <circle 
+          cx="0" 
+          cy="0" 
+          r="4.0" 
           fill="url(#postGold)" 
           stroke="#000" 
-          strokeWidth="1" 
+          strokeWidth="0.8" 
+          style={{
+            transform: isPulsing ? 'scale(0.92)' : 'scale(1)',
+            transition: 'transform 0.08s ease-in-out',
+          }}
         />
-        <text x="0" y="9" fontSize="3" fontFamily="monospace" fill={theme.accent} textAnchor="middle" fontWeight="bold">
-          ACTIVE CORE: {isPulsing ? (breathFactor > 0.55 ? "COMP-B" : "COMP-A") : "DUAL-MIX"}
+        {/* Glowing Pilot LED dot in center of firing button */}
+        <circle 
+          cx="0" 
+          cy="0" 
+          r="1.2" 
+          fill={isPulsing ? "#39ff14" : "#ff007f"} 
+          className={isPulsing ? "animate-pulse" : ""} 
+          style={{
+            filter: `drop-shadow(0 0 ${isPulsing ? '3px' : '1px'} ${isPulsing ? '#39ff14' : '#ff007f'})`
+          }}
+        />
+      </g>
+
+      {/* Slide mode active switch indicator at the very bottom center */}
+      <g 
+        transform="translate(60, 178)"
+        className="boutiq-svg-selector cursor-pointer"
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggleTank?.();
+        }}
+        style={{ cursor: "pointer" }}
+      >
+        {/* Switch backing slot */}
+        <rect x="-16" y="-3.5" width="32" height="6.5" rx="3.2" fill="#0c0717" stroke="#2e1065" strokeWidth="1" />
+        {/* Sliding mechanical knob */}
+        <rect 
+          x={selectedTank === 'left' ? "-12" : selectedTank === 'right' ? "4" : "-4"} 
+          y="-5.5" 
+          width="8" 
+          height="10.5" 
+          rx="2" 
+          fill="url(#postGold)" 
+          stroke="#000" 
+          strokeWidth="1.2" 
+          style={{ transition: 'x 0.15s ease-out' }}
+        />
+        <text x="0" y="11" fontSize="3.4" fontFamily="'Share Tech Mono', monospace" fill={theme.accent} textAnchor="middle" fontWeight="bold">
+          {selectedTank === 'both' ? "DUAL-MIX ACTIVE" : selectedTank === 'left' ? "INDICA (L) ONLY" : "SATIVA (R) ONLY"}
         </text>
       </g>
 
-      {/* Exterior highlights */}
-      <rect x="19.5" y="66" width="2" height="45" fill={theme.accent} opacity="0.85" />
-      <rect x="98.5" y="66" width="2" height="45" fill={theme.accent} opacity="0.85" />
+      {/* Exterior chassis detail accents */}
+      <rect x="20.5" y="66" width="1.5" height="42" fill={theme.accent} opacity="0.8" />
+      <rect x="98" y="66" width="1.5" height="42" fill={theme.accent} opacity="0.8" />
+      
+      {/* Dynamic base USB-C connector port detailed shape */}
+      <path d="M 48,189 L 72,189 L 70,192 L 50,192 Z" fill="#18181b" stroke="#000" strokeWidth="1" />
+      <rect x="52" y="190" width="16" height="1.2" rx="0.6" fill="#3f3f46" />
     </svg>
   );
 };
@@ -2070,6 +2255,32 @@ export default function App() {
   const [inputMode, setInputMode] = useState<'HOLD' | 'TOGGLE'>('TOGGLE');
   const [isDirectToggled, setIsDirectToggled] = useState<boolean>(false);
 
+  // Boutiq specific configuration states
+  const [selectedTank, setSelectedTank] = useState<'both' | 'left' | 'right'>('both');
+  const [customLeftLabel, setCustomLeftLabel] = useState<string>('');
+  const [customRightLabel, setCustomRightLabel] = useState<string>('');
+
+  const handleToggleBoutiqTank = () => {
+    setSelectedTank((prev) => {
+      const next = prev === 'left' ? 'right' : prev === 'right' ? 'both' : 'left';
+      triggerAudioBeep(330, 'sine', 0.05);
+      return next;
+    });
+  };
+
+  const handleBoutiqButtonPress = () => {
+    playTactileClick();
+    if (activeSessionState === 'INHALING') {
+      haltInhalation();
+      setIsDirectToggled(false);
+    } else if (activeSessionState === 'IDLE' || activeSessionState === 'SUCCESS' || activeSessionState === 'TAPPED_OUT') {
+      if (activeSessionState === 'IDLE') {
+        startInhalation();
+        setIsDirectToggled(true);
+      }
+    }
+  };
+
   // Overlay state
   const [showCelebration, setShowCelebration] = useState<boolean>(false);
   const [isInfoOpen, setIsInfoOpen] = useState<boolean>(false);
@@ -2082,60 +2293,57 @@ export default function App() {
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   const getSmokeParticles = () => {
-    const count = voltage <= 2.4 ? 10 : voltage >= 4.0 ? 28 : 18;
+    // We adjust the particle count based on voltage power level to achieve realistic puff density
+    const count = voltage <= 2.4 ? 12 : voltage >= 4.0 ? 32 : 20;
     const list = [];
     for (let i = 0; i < count; i++) {
-      const dirs = ['l', 'r', 'c', 's1', 's2'];
-      const dir = dirs[i % dirs.length];
-      const delayVal = i * 0.12;
-      const delay = delayVal.toFixed(2);
-      let baseSize = 14;
-      if (voltage <= 2.4) {
-        baseSize = 12 + (i % 4) * 4;
-      } else if (voltage >= 4.0) {
-        baseSize = 24 + (i % 6) * 8;
-      } else {
-        baseSize = 16 + (i % 4) * 6;
-      }
-      const blur = i % 4 === 0 ? 'blur-md' : i % 4 === 1 ? 'blur-lg' : i % 4 === 2 ? 'blur-sm' : 'blur-xl';
-      const bgClasses = [
-        'bg-white/20 shadow-[0_0_8px_rgba(255,255,255,0.15)]',
-        'bg-slate-200/25 shadow-[0_0_8px_rgba(240,240,245,0.1)]',
-        'bg-zinc-100/30 shadow-[0_0_10px_rgba(255,255,255,0.2)]',
-        'bg-white/30 shadow-[0_0_12px_rgba(255,255,255,0.25)]',
-        'bg-slate-100/20 shadow-[0_0_8px_rgba(235,235,240,0.12)]',
-        'bg-white/25 shadow-[0_0_10px_rgba(255,255,255,0.2)]'
-      ];
-      const bg = bgClasses[i % bgClasses.length];
-      
-      // Main particle
-      list.push({
-        id: `smoke-${i}`,
-        dir,
-        delay: `${delay}s`,
-        size: `${baseSize}px`,
-        blur,
-        bg
-      });
+       const dirs = ['l', 'r', 'c', 's1', 's2'];
+       const dir = dirs[i % dirs.length];
+       const delayVal = i * 0.08; // smooth sequential release 
+       const delay = delayVal.toFixed(2);
+       let baseSize = 25; // larger size bounds since radial gradient feathers out elegantly
+       if (voltage <= 2.4) {
+         baseSize = 20 + (i % 4) * 8;
+       } else if (voltage >= 4.0) {
+         baseSize = 42 + (i % 6) * 16;
+       } else {
+         baseSize = 30 + (i % 4) * 12;
+       }
 
-      // Trailing Ghost Particle - slightly offset (inherits path & opacity slightly faded)
-      const ghostDelay = (delayVal + 0.16).toFixed(2);
-      const ghostSize = Math.max(8, Math.round(baseSize * 0.8));
-      const ghostBg = bg
-        .replace('/30', '/10')
-        .replace('/25', '/8')
-        .replace('/20', '/6')
-        .replace('0.25', '0.08')
-        .replace('0.2', '0.06');
+       // Pre-feathered radial-gradient background for 100% fluent lag-free white smoke clouds!
+       // By using native fading gradients, we completely bypass slow CPU blur filters!
+       const bgClasses = [
+         'bg-[radial-gradient(circle,rgba(255,255,255,0.4)_0%,rgba(255,255,255,0.15)_45%,rgba(255,255,255,0)_100%)]',
+         'bg-[radial-gradient(circle,rgba(250,250,253,0.35)_0%,rgba(250,250,253,0.12)_45%,rgba(250,250,253,0)_100%)]',
+         'bg-[radial-gradient(circle,rgba(255,255,255,0.45)_0%,rgba(255,255,255,0.18)_40%,rgba(255,255,255,0)_100%)]',
+         'bg-[radial-gradient(circle,rgba(240,240,248,0.38)_0%,rgba(240,240,248,0.14)_45%,rgba(240,240,248,0)_100%)]',
+         'bg-[radial-gradient(circle,rgba(255,255,255,0.32)_0%,rgba(255,255,255,0.12)_48%,rgba(255,255,255,0)_100%)]'
+       ];
+       const bg = bgClasses[i % bgClasses.length];
 
-      list.push({
-        id: `smoke-ghost-${i}`,
-        dir, 
-        delay: `${ghostDelay}s`,
-        size: `${ghostSize}px`,
-        blur: 'blur-lg', 
-        bg: ghostBg
-      });
+       // Primary puff
+       list.push({
+         id: `smoke-${i}`,
+         dir,
+         delay: `${delay}s`,
+         size: `${baseSize}px`,
+         blur: '', // Zero expensive CSS filter
+         bg
+       });
+
+       // Secondary micro offsetting puff to add detail
+       const puffDelay = (delayVal + 0.12).toFixed(2);
+       const puffSize = Math.max(12, Math.round(baseSize * 0.75));
+       const puffBg = bgClasses[(i + 1) % bgClasses.length];
+
+       list.push({
+         id: `smoke-micro-${i}`,
+         dir, 
+         delay: `${puffDelay}s`,
+         size: `${puffSize}px`,
+         blur: '', 
+         bg: puffBg
+       });
     }
     return list;
   };
@@ -2648,7 +2856,7 @@ export default function App() {
   const leadingPlayer = [...players].sort((a, b) => b.score - a.score)[0];
 
   return (
-    <div className={`min-h-screen bg-[#0c041b] text-white bg-scanlines font-mono selection:bg-[#a855f7] selection:text-black relative flex flex-col justify-between overflow-x-hidden ${getScreenRumbleStyle()}`}>
+    <div className="min-h-screen bg-[#0c041b] text-white bg-scanlines font-mono selection:bg-[#a855f7] selection:text-black relative flex flex-col justify-between overflow-x-hidden">
       
       {/* Dynamic Animated Vector Particle Overlay */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden z-40">
@@ -3279,7 +3487,7 @@ export default function App() {
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 bg-[#11061c] border-4 border-black p-6 neo-box relative" ref={containerRef}>
               
               {/* Graphical Display */}
-              <div className="lg:col-span-4 flex flex-col justify-center items-center bg-[#07030e] border-2 border-black p-4 relative min-h-[220px]">
+              <div className={`lg:col-span-4 flex flex-col justify-center items-center bg-[#07030e] border-2 border-black p-4 relative min-h-[220px] transition-transform ${getScreenRumbleStyle()}`}>
                 {activePlayer.device === 'cartridge' && (
                   <CartridgeSVG 
                     oilLevel={activePlayer.oilLevel} 
@@ -3319,16 +3527,21 @@ export default function App() {
                     isCompleted={activeSessionState === 'SUCCESS'}
                     progress={progressRatio}
                     playerName={activePlayer.name}
+                    selectedTank={selectedTank}
+                    onToggleTank={handleToggleBoutiqTank}
+                    onClickButton={handleBoutiqButtonPress}
+                    customLeft={customLeftLabel}
+                    customRight={customRightLabel}
                   />
                 )}
 
-                {/* Real-time Dynamic Smoke/Vapor Clouds */}
+                {/* Real-time Dynamic Smoke/Vapor Clouds - using pre-feathered native gradients */}
                 {activeSessionState === 'INHALING' && (
-                  <div className="absolute top-10 left-1/2 -translate-x-1/2 w-16 h-28 pointer-events-none z-20 flex justify-center" style={{ filter: `brightness(${voltage >= 4.0 ? 1.45 : voltage <= 2.4 ? 0.75 : 1.15})` }}>
+                  <div className="absolute top-10 left-1/2 -translate-x-1/2 w-32 h-32 pointer-events-none z-20 flex justify-center" style={{ filter: `brightness(${voltage >= 4.0 ? 1.45 : voltage <= 2.4 ? 0.75 : 1.15})` }}>
                     {getSmokeParticles().map((p) => (
                       <div 
                         key={p.id}
-                        className={`absolute rounded-full ${p.blur} ${p.bg} animate-smoke-${p.dir}`}
+                        className={`absolute rounded-full ${p.bg} animate-smoke-${p.dir}`}
                         style={{
                           animationDelay: p.delay,
                           width: p.size,
@@ -3339,21 +3552,20 @@ export default function App() {
                   </div>
                 )}
 
-                {/* Persistent Faint Drifting White Trail Clouds */}
+                {/* Persistent Faint Drifting White Trail Clouds - using pre-feathered native gradients */}
                 <div className="absolute inset-0 pointer-events-none overflow-hidden z-25">
                   {trailParticles.map((t) => (
                     <div
                       key={t.id}
-                      className={`absolute rounded-full p-0 m-0 ${t.blur}`}
+                      className="absolute rounded-full p-0 m-0"
                       style={{
                         left: `calc(50% + ${t.x}px)`,
                         top: `${t.y}px`,
-                        width: `${t.size}px`,
-                        height: `${t.size}px`,
-                        backgroundColor: t.color,
+                        width: `${t.size * 2.2}px`,
+                        height: `${t.size * 2.2}px`,
+                        background: 'radial-gradient(circle, rgba(235, 235, 240, 0.45) 0%, rgba(235, 235, 240, 0.15) 50%, rgba(235, 235, 240, 0) 100%)',
                         opacity: t.opacity,
                         transform: 'translate(-50%, -50%)',
-                        boxShadow: `0 0 ${t.size / 2}px rgba(255, 255, 255, 0.4)`,
                       }}
                     />
                   ))}
@@ -3448,6 +3660,63 @@ export default function App() {
                     </button>
                   </div>
                 </div>
+
+                {activePlayer.device === 'boutiq' && (
+                  <div className="bg-[#0b0413] p-3 border-2 border-[#ff007f]/40 flex flex-col gap-3">
+                    <div>
+                      <span className="font-mono text-xs text-[#ffd700] block mb-1 font-bold uppercase">Boutiq Hardware Label Config</span>
+                      <span className="text-[9px] text-slate-400 font-mono block">Type custom text onto the physical LED display plaque of your Boutiq hardware.</span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="font-mono text-[9px] text-zinc-400 block mb-1">Left Tank Label (Indica)</label>
+                        <div className="flex gap-1.5">
+                          <input
+                            type="text"
+                            className="bg-[#07030e] border border-zinc-700 text-white font-mono text-xs px-2.5 py-1.5 w-full uppercase focus:outline-none focus:border-[#39ff14]/80"
+                            placeholder="e.g. PINK DRAGON"
+                            maxLength={14}
+                            value={customLeftLabel}
+                            onChange={(e) => {
+                              setCustomLeftLabel(e.target.value);
+                            }}
+                          />
+                          {customLeftLabel && (
+                            <button 
+                              className="text-zinc-500 hover:text-white px-1 font-mono text-xs"
+                              onClick={() => setCustomLeftLabel('')}
+                            >
+                              ×
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="font-mono text-[9px] text-zinc-400 block mb-1">Right Tank Label (Sativa)</label>
+                        <div className="flex gap-1.5">
+                          <input
+                            type="text"
+                            className="bg-[#07030e] border border-zinc-700 text-white font-mono text-xs px-2.5 py-1.5 w-full uppercase focus:outline-none focus:border-[#ff007f]/80"
+                            placeholder="e.g. GRAPE APE"
+                            maxLength={14}
+                            value={customRightLabel}
+                            onChange={(e) => {
+                              setCustomRightLabel(e.target.value);
+                            }}
+                          />
+                          {customRightLabel && (
+                            <button 
+                              className="text-zinc-500 hover:text-white px-1 font-mono text-xs"
+                              onClick={() => setCustomRightLabel('')}
+                            >
+                              ×
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
  
               </div>
 
