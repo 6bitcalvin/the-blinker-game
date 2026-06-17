@@ -476,7 +476,19 @@ function playBuzzerTune() {
 
 
 // --- Celebratory Neon Particle Overlay Component ---
-const CelebrationOverlay = ({ playerName, score, onClose, customScoreText }: { playerName: string; score: number; onClose: () => void; customScoreText?: string }) => {
+const CelebrationOverlay = ({ 
+  playerName, 
+  score, 
+  onClose, 
+  customScoreText, 
+  isBaseball 
+}: { 
+  playerName: string; 
+  score: number; 
+  onClose: () => void; 
+  customScoreText?: string; 
+  isBaseball?: boolean;
+}) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -497,52 +509,161 @@ const CelebrationOverlay = ({ playerName, score, onClose, customScoreText }: { p
     };
     window.addEventListener('resize', handleResize);
 
-    const colors = ['#ff007f', '#00f3ff', '#39ff14', '#ffd700', '#7b2cbf'];
+    const colors = isBaseball 
+      ? ['#ffe400', '#00f3ff', '#39ff14', '#ff0055', '#ff9900', '#ffffff'] 
+      : ['#ff007f', '#00f3ff', '#39ff14', '#ffd700', '#7b2cbf'];
+
     const particlesArray: Array<{
+      type: 'rocket' | 'spark';
       x: number;
       y: number;
       vx: number;
       vy: number;
-      radius: number;
+      size: number;
       color: string;
       alpha: number;
       decay: number;
+      gravityEnabled?: boolean;
     }> = [];
 
-    // Spawn drift particles
-    for (let i = 0; i < 100; i++) {
-      particlesArray.push({
-        x: Math.random() * width,
-        y: Math.random() * height,
-        vx: (Math.random() - 0.5) * 3,
-        vy: (Math.random() - 0.5) * 3 - 1.0,
-        radius: Math.random() * 2 + 1,
-        color: colors[Math.floor(Math.random() * colors.length)],
-        alpha: Math.random() * 0.7 + 0.3,
-        decay: Math.random() * 0.003 + 0.001,
-      });
+    // Spark drift particles initially
+    if (!isBaseball) {
+      for (let i = 0; i < 100; i++) {
+        particlesArray.push({
+          type: 'spark',
+          x: Math.random() * width,
+          y: Math.random() * height,
+          vx: (Math.random() - 0.5) * 3,
+          vy: (Math.random() - 0.5) * 3 - 1.0,
+          size: Math.random() * 2 + 1,
+          color: colors[Math.floor(Math.random() * colors.length)],
+          alpha: Math.random() * 0.7 + 0.3,
+          decay: Math.random() * 0.003 + 0.001,
+          gravityEnabled: false
+        });
+      }
+    } else {
+      // Chunkier retro ambient cells for baseball
+      for (let i = 0; i < 40; i++) {
+        particlesArray.push({
+          type: 'spark',
+          x: Math.random() * width,
+          y: Math.random() * height,
+          vx: (Math.random() - 0.5) * 0.8,
+          vy: -Math.random() * 0.5 - 0.2,
+          size: 4 + Math.floor(Math.random() * 4),
+          color: colors[Math.floor(Math.random() * colors.length)],
+          alpha: Math.random() * 0.5 + 0.3,
+          decay: Math.random() * 0.002 + 0.001,
+          gravityEnabled: false
+        });
+      }
     }
 
-    const explode = (cx: number, cy: number) => {
-      for (let i = 0; i < 60; i++) {
-        const angle = Math.random() * Math.PI * 2;
-        const speed = Math.random() * 6 + 2;
-        particlesArray.push({
-          x: cx,
-          y: cy,
-          vx: Math.cos(angle) * speed,
-          vy: Math.sin(angle) * speed,
-          radius: Math.random() * 3 + 1,
-          color: colors[Math.floor(Math.random() * colors.length)],
-          alpha: 1.0,
-          decay: Math.random() * 0.015 + 0.01,
-        });
+    const explode = (cx: number, cy: number, color: string) => {
+      if (isBaseball) {
+        // 8-bit retro block explosion
+        const ringCount = 36;
+        for (let i = 0; i < ringCount; i++) {
+          const angle = (i / ringCount) * Math.PI * 2;
+          // concentric ring velocity
+          const speedFactor = (i % 2 === 0) ? 3.5 : 5.5;
+          particlesArray.push({
+            type: 'spark',
+            x: cx,
+            y: cy,
+            vx: Math.cos(angle) * speedFactor,
+            vy: Math.sin(angle) * speedFactor,
+            size: 6 + Math.floor(Math.random() * 4), // chunky squares
+            color: color,
+            alpha: 1.0,
+            decay: 0.015 + Math.random() * 0.01,
+            gravityEnabled: true
+          });
+        }
+        // Central sparkle block
+        for (let j = 0; j < 6; j++) {
+          const angle = Math.random() * Math.PI * 2;
+          particlesArray.push({
+            type: 'spark',
+            x: cx,
+            y: cy,
+            vx: Math.cos(angle) * 1.5,
+            vy: Math.sin(angle) * 1.5,
+            size: 10,
+            color: '#ffffff',
+            alpha: 1.0,
+            decay: 0.04,
+            gravityEnabled: false
+          });
+        }
+        // Retro sound!
+        try {
+          playSynthBeep(260 + Math.random() * 400, 'square', 0.07);
+          setTimeout(() => playSynthBeep(130 + Math.random() * 100, 'triangle', 0.1), 50);
+        } catch {}
+      } else {
+        // Normal explosion
+        for (let i = 0; i < 60; i++) {
+          const angle = Math.random() * Math.PI * 2;
+          const speed = Math.random() * 6 + 2;
+          particlesArray.push({
+            type: 'spark',
+            x: cx,
+            y: cy,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed,
+            size: Math.random() * 3 + 1,
+            color: color,
+            alpha: 1.0,
+            decay: Math.random() * 0.015 + 0.01,
+            gravityEnabled: true
+          });
+        }
       }
     };
 
-    explode(width / 2, height / 2);
-    const t1 = setTimeout(() => explode(width * 0.3, height * 0.4), 600);
-    const t2 = setTimeout(() => explode(width * 0.7, height * 0.4), 1200);
+    const launchRocket = () => {
+      const rx = 100 + Math.random() * (width - 200);
+      const ry = height;
+      const targetY = 100 + Math.random() * (height / 2);
+      const dy = targetY - ry;
+      const vy = -Math.sqrt(2 * 0.08 * Math.abs(dy)); // physical ascent
+      const color = colors[Math.floor(Math.random() * colors.length)];
+
+      particlesArray.push({
+        type: 'rocket',
+        x: rx,
+        y: ry,
+        vx: (Math.random() - 0.5) * 2,
+        vy: vy,
+        size: 8,
+        color: color,
+        alpha: 1.0,
+        decay: 0,
+        gravityEnabled: false
+      });
+
+      try {
+        playSynthBeep(700, 'sine', 0.04);
+      } catch {}
+    };
+
+    if (!isBaseball) {
+      explode(width / 2, height / 2, colors[0]);
+    } else {
+      setTimeout(() => { launchRocket(); }, 100);
+    }
+
+    const t1 = setTimeout(() => explode(width * 0.3, height * 0.4, colors[1 % colors.length]), 500);
+    const t2 = setTimeout(() => explode(width * 0.7, height * 0.4, colors[2 % colors.length]), 1000);
+
+    let launchInterval: NodeJS.Timeout | null = null;
+    if (isBaseball) {
+      launchInterval = setInterval(() => {
+        if (Math.random() < 0.7) launchRocket();
+      }, 750);
+    }
 
     const animate = () => {
       ctx.clearRect(0, 0, width, height);
@@ -554,31 +675,71 @@ const CelebrationOverlay = ({ playerName, score, onClose, customScoreText }: { p
         const p = particlesArray[i];
         p.x += p.vx;
         p.y += p.vy;
-        p.vy += 0.02;
+
+        if (p.gravityEnabled) {
+          p.vy += 0.08;
+        }
+        
         p.alpha -= p.decay;
 
-        if (p.alpha <= 0) {
-          if (particlesArray.length < 120 && Math.random() < 0.15) {
-            p.x = Math.random() * width;
-            p.y = height + 10;
-            p.vx = (Math.random() - 0.5) * 1.5;
-            p.vy = -Math.random() * 2 - 1;
-            p.alpha = 1.0;
-          } else {
+        if (p.type === 'rocket') {
+          if (p.vy >= -1.0) {
+            explode(p.x, p.y, p.color);
             particlesArray.splice(i, 1);
             i--;
             continue;
           }
+
+          // Leave trail
+          if (Math.random() < 0.35) {
+            particlesArray.push({
+              type: 'spark',
+              x: p.x + (Math.random() - 0.5) * 4,
+              y: p.y + 4,
+              vx: (Math.random() - 0.5) * 0.4,
+              vy: 0.4,
+              size: 4,
+              color: '#aaaaaa',
+              alpha: 0.6,
+              decay: 0.05,
+              gravityEnabled: false
+            });
+          }
+        } else {
+          if (p.alpha <= 0) {
+            if (!isBaseball && particlesArray.length < 120 && Math.random() < 0.15) {
+              p.x = Math.random() * width;
+              p.y = height + 10;
+              p.vx = (Math.random() - 0.5) * 1.5;
+              p.vy = -Math.random() * 2 - 1;
+              p.alpha = 1.0;
+            } else {
+              particlesArray.splice(i, 1);
+              i--;
+              continue;
+            }
+          }
         }
 
         ctx.save();
-        ctx.globalAlpha = p.alpha;
-        ctx.shadowBlur = 8;
-        ctx.shadowColor = p.color;
-        ctx.fillStyle = p.color;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.globalAlpha = Math.max(0, p.alpha);
+        
+        if (isBaseball) {
+          // Snap coordinate display to 4px boundaries for clean retro 8-bit discretization!
+          const px = Math.floor(p.x / 4) * 4;
+          const py = Math.floor(p.y / 4) * 4;
+          const ps = Math.floor(p.size / 2) * 2 || 4;
+
+          ctx.fillStyle = p.color;
+          ctx.fillRect(px - ps / 2, py - ps / 2, ps, ps);
+        } else {
+          ctx.shadowBlur = 8;
+          ctx.shadowColor = p.color;
+          ctx.fillStyle = p.color;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+          ctx.fill();
+        }
         ctx.restore();
       }
 
@@ -591,35 +752,67 @@ const CelebrationOverlay = ({ playerName, score, onClose, customScoreText }: { p
       window.removeEventListener('resize', handleResize);
       clearTimeout(t1);
       clearTimeout(t2);
+      if (launchInterval) clearInterval(launchInterval);
       cancelAnimationFrame(animationFrameId);
     };
-  }, []);
+  }, [isBaseball]);
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center p-4">
       <canvas ref={canvasRef} className="absolute inset-0 w-full h-full block" />
       
-      <div className="relative z-10 bg-[#12061c]/95 border-4 border-[#ff007f] p-8 text-center max-w-sm w-full shadow-[0_0_20px_#ff007f]">
-        <div className="mb-4 animate-bounce flex justify-center">
-          <PixelCrownIcon size={64} />
-        </div>
-        <h2 className="font-mono text-xs uppercase tracking-widest text-[#00f3ff] mb-1">
-          Top Player
-        </h2>
-        <h1 className="font-mono text-2xl font-bold text-[#39ff14] mb-3 uppercase tracking-tight">
-          {playerName}
-        </h1>
-        <p className="font-mono text-sm text-slate-300 mb-6">
-          {customScoreText ? customScoreText : `Score: ${score} points`}
-        </p>
+      {isBaseball ? (
+        <div className="relative z-10 bg-[#0e0717]/95 border-8 border-double border-[#ffd700] p-8 text-center max-w-sm w-full shadow-[0_0_25px_#ffd700] neo-box">
+          <div className="mb-4 animate-bounce flex justify-center">
+            <PixelCrownIcon size={64} />
+          </div>
+          <h2 className="font-mono text-xs uppercase tracking-widest text-[#00f3ff] mb-2 font-black">
+            BASEBALL CHAMPION
+          </h2>
+          
+          <div className="bg-black/60 border-2 border-dashed border-[#ffe400]/40 p-4 mb-4">
+            <h1 className="font-mono text-3xl font-extrabold text-[#39ff14] uppercase tracking-tight blink-fast">
+              {playerName}
+            </h1>
+            <p className="font-mono text-[10px] text-zinc-400 mt-1 uppercase tracking-wide">
+              Surviving Base Runner
+            </p>
+          </div>
 
-        <button
-          onClick={onClose}
-          className="w-full py-3 bg-[#ff007f] text-black font-mono text-xs font-bold border-2 border-black hover:bg-pink-400 active:translate-y-0.5 transition-all shadow-[4px_4px_0_#000]"
-        >
-          Close
-        </button>
-      </div>
+          <p className="font-mono text-xs text-slate-300 mb-6 leading-relaxed">
+            Congratulations! You took perfect 5s hits, held your breath, cycled the field, and outranked everyone in the circle!
+          </p>
+
+          <button
+            onClick={onClose}
+            className="w-full py-4 bg-[#ffd700] hover:bg-[#ffea3b] text-black font-mono text-xs font-black border-4 border-black hover:translate-y-0.5 active:translate-y-1 transition-all shadow-[6px_6px_0_#000] uppercase tracking-widest cursor-pointer"
+          >
+            Play Ball! (Close)
+          </button>
+        </div>
+      ) : (
+        <div className="relative z-10 bg-[#12061c]/95 border-4 border-[#ff007f] p-8 text-center max-w-sm w-full shadow-[0_0_20px_#ff007f]">
+          <div className="mb-4 animate-bounce flex justify-center">
+            <PixelCrownIcon size={64} />
+          </div>
+          <h2 className="font-mono text-xs uppercase tracking-widest text-[#00f3ff] mb-1">
+            Top Player
+          </h2>
+          <h1 className="font-mono text-2xl font-bold text-[#39ff14] mb-3 uppercase tracking-tight">
+            {playerName}
+          </h1>
+          <p className="font-mono text-sm text-slate-300 mb-6 font-semibold">
+            {customScoreText ? customScoreText : `Score: ${score} points`}
+          </p>
+
+          <button
+            onClick={onClose}
+            className="w-full py-3 bg-[#ff007f] text-black font-mono text-xs font-bold border-2 border-black hover:bg-pink-400 active:translate-y-0.5 transition-all shadow-[4px_4px_0_#000]"
+          >
+            Close
+          </button>
+        </div>
+      )}
     </div>
   );
 };
@@ -2244,7 +2437,7 @@ export default function App() {
   const [newPlayerDevice, setNewPlayerDevice] = useState<'cartridge' | 'disposable' | 'muhameds' | 'boutiq'>('cartridge');
 
   // Session state
-  const [gameMode, setGameMode] = useState<'CLASSIC' | 'DRAIN'>('CLASSIC');
+  const [gameMode, setGameMode] = useState<'CLASSIC' | 'DRAIN' | 'BASEBALL'>('CLASSIC');
   const [drainGameDuration, setDrainGameDuration] = useState<number>(90); // 60s, 90s, 120s
   const [drainTimeRemaining, setDrainTimeRemaining] = useState<number>(90);
   const [blinkMode, setBlinkMode] = useState<'TAKE_BLINKER' | 'DOUBLE_BLINKER'>('TAKE_BLINKER');
@@ -2254,6 +2447,26 @@ export default function App() {
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [inputMode, setInputMode] = useState<'HOLD' | 'TOGGLE'>('TOGGLE');
   const [isDirectToggled, setIsDirectToggled] = useState<boolean>(false);
+
+  // Baseball Game Mode State
+  const [baseballPlayers, setBaseballPlayers] = useState<{
+    id: string;
+    name: string;
+    device: 'cartridge' | 'disposable' | 'muhameds' | 'boutiq';
+    status: 'IDLE' | 'RIPPING' | 'HOLDING' | 'SAFE' | 'DISQUALIFIED';
+    holdTime: number;
+    hasRippedThisRound: boolean;
+    isEliminated: boolean;
+    oilLevel: number;
+    batteryLevel: number;
+  }[]>([]);
+  const [baseballRound, setBaseballRound] = useState<number>(1);
+  const [baseballPossessionIdx, setBaseballPossessionIdx] = useState<number>(0);
+  const [baseballActiveSessionState, setBaseballActiveSessionState] = useState<'IDLE' | 'RIPPING' | 'RIP_SUCCESS' | 'RIP_FAILED' | 'ROUND_FAILED_POPUP'>('IDLE');
+  const [baseballTimer, setBaseballTimer] = useState<number>(0.0);
+  const [baseballFailedPlayerName, setBaseballFailedPlayerName] = useState<string>('');
+  const [baseballLogStr, setBaseballLogStr] = useState<string>('Welcome to the Baseball Arena!');
+  const baseballTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Boutiq specific configuration states
   const [selectedTank, setSelectedTank] = useState<'both' | 'left' | 'right'>('both');
@@ -2785,6 +2998,13 @@ export default function App() {
 
   const triggerReset = () => {
     triggerAudioBeep(220, 'square', 0.2);
+    
+    if (baseballTimerRef.current) {
+      clearInterval(baseballTimerRef.current);
+      baseballTimerRef.current = null;
+    }
+    stopInhaleSizzle();
+
     setPlayers(prev => prev.map(p => ({ 
       ...p, 
       score: 0, 
@@ -2803,7 +3023,234 @@ export default function App() {
     setIsDirectToggled(false);
     setFunnyQuote('Reset completed.');
     setDrainTimeRemaining(drainGameDuration);
+    
+    // Reset baseball specific states
+    setBaseballRound(1);
+    setBaseballPossessionIdx(0);
+    setBaseballActiveSessionState('IDLE');
+    setBaseballTimer(0.0);
+    setBaseballLogStr('Welcome to the Baseball Arena!');
+
     setGamePhase('LOBBY');
+  };
+
+  // --- BASEBALL GAME ENGINE ---
+  // Periodically increment holdTime for active breath holders
+  useEffect(() => {
+    if (gameMode !== 'BASEBALL' || gamePhase !== 'GAME_ON') return;
+    const interval = setInterval(() => {
+      setBaseballPlayers((prev) =>
+        prev.map((bp) => {
+          if (bp.status === 'HOLDING') {
+            return { ...bp, holdTime: bp.holdTime + 1 };
+          }
+          return bp;
+        })
+      );
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [gameMode, gamePhase]);
+
+  const getNextBaseballSurvivorIdx = (currentIdx: number, list = baseballPlayers): number => {
+    if (list.length === 0) return 0;
+    let check = (currentIdx + 1) % list.length;
+    for (let i = 0; i < list.length; i++) {
+      if (!list[check].isEliminated) {
+        return check;
+      }
+      check = (check + 1) % list.length;
+    }
+    return currentIdx;
+  };
+
+  const startBaseballRip = () => {
+    if (baseballActiveSessionState === 'RIP_SUCCESS' || baseballActiveSessionState === 'RIP_FAILED') return;
+    
+    triggerAudioBeep(580, 'triangle', 0.08);
+    setBaseballActiveSessionState('RIPPING');
+    setBaseballTimer(0.0);
+    
+    // Set active loader status to RIPPING
+    setBaseballPlayers((prev) => 
+      prev.map((bp, idx) => idx === baseballPossessionIdx ? { ...bp, status: 'RIPPING' } : bp)
+    );
+
+    if (!isMuted) startInhaleSizzle();
+
+    if (baseballTimerRef.current) clearInterval(baseballTimerRef.current);
+    
+    baseballTimerRef.current = setInterval(() => {
+      setBaseballTimer((prev) => {
+        const next = Math.min(prev + 0.1, 5.0);
+        
+        // drain battery/oil
+        setBaseballPlayers((prevBp) => {
+          return prevBp.map((bp, idx) => {
+            if (idx === baseballPossessionIdx) {
+              const voltFactor = voltage === 2.4 ? 0.6 : voltage === 4.0 ? 1.6 : 1.0;
+              const isPremiumDispo = bp.device === 'muhameds' || bp.device === 'boutiq';
+              const battDrainFactor = isPremiumDispo ? 0.001 : 0.0006;
+              const nextBatt = Math.max(0.01, (bp.batteryLevel ?? 1.0) - (battDrainFactor * voltFactor));
+              const nextOil = Math.max(0.01, bp.oilLevel - (0.0008 * voltFactor));
+              return {
+                ...bp,
+                batteryLevel: nextBatt,
+                oilLevel: nextOil
+              };
+            }
+            return bp;
+          });
+        });
+
+        // Pulsing beeps at every integer second
+        if (Math.round(next * 10) % 10 === 0 && next < 5.0 && next > 0) {
+          triggerAudioBeep(340 + (next * 50), 'sine', 0.04);
+        }
+
+        if (next >= 5.0) {
+          clearInterval(baseballTimerRef.current!);
+          baseballTimerRef.current = null;
+          concludeBaseballRipSuccess();
+          return 5.0;
+        }
+        return next;
+      });
+    }, 100);
+  };
+
+  const haltBaseballRip = () => {
+    if (baseballActiveSessionState !== 'RIPPING') return;
+    clearInterval(baseballTimerRef.current!);
+    baseballTimerRef.current = null;
+    
+    if (baseballTimer < 5.0) {
+      concludeBaseballRipFail();
+    }
+  };
+
+  const concludeBaseballRipSuccess = () => {
+    stopInhaleSizzle();
+    if (!isMuted) playBlinkerSuccessTune();
+    setBaseballActiveSessionState('RIP_SUCCESS');
+    handleSpawnConfettiCloud();
+    
+    const activePlayer = baseballPlayers[baseballPossessionIdx];
+    setBaseballLogStr(`${activePlayer?.name || 'Player'} completed an extraordinary 5s rip! Now HOLDING.`);
+    
+    setBaseballPlayers((prev) => 
+      prev.map((bp, idx) => 
+        idx === baseballPossessionIdx 
+          ? { ...bp, status: 'HOLDING', holdTime: 0, hasRippedThisRound: true } 
+          : bp
+      )
+    );
+  };
+
+  const concludeBaseballRipFail = () => {
+    stopInhaleSizzle();
+    if (!isMuted) playBuzzerTune();
+    
+    const failedPlayer = baseballPlayers[baseballPossessionIdx];
+    setBaseballFailedPlayerName(failedPlayer?.name || 'Someone');
+    setBaseballActiveSessionState('ROUND_FAILED_POPUP');
+    setBaseballLogStr(`${failedPlayer?.name || 'Someone'} choked on the rip! Disqualified!`);
+    
+    setBaseballPlayers((prev) => 
+      prev.map((bp, idx) => 
+        idx === baseballPossessionIdx 
+          ? { ...bp, status: 'DISQUALIFIED', isEliminated: true } 
+          : bp
+      )
+    );
+  };
+
+  const handleEarlyExhaleDisqualify = (playerIdx: number) => {
+    triggerAudioBeep(120, 'sawtooth', 0.45);
+    const failedPlayer = baseballPlayers[playerIdx];
+    setBaseballFailedPlayerName(failedPlayer?.name || 'Someone');
+
+    if (baseballTimerRef.current) {
+      clearInterval(baseballTimerRef.current);
+      baseballTimerRef.current = null;
+    }
+    stopInhaleSizzle();
+
+    setBaseballActiveSessionState('ROUND_FAILED_POPUP');
+    setBaseballLogStr(`${failedPlayer?.name || 'Someone'} exhaled without the cartridge! Disqualified!`);
+
+    setBaseballPlayers((prev) => 
+      prev.map((bp, idx) => 
+        idx === playerIdx 
+          ? { ...bp, status: 'DISQUALIFIED', isEliminated: true } 
+          : bp
+      )
+    );
+  };
+
+  const startNextBaseballRound = () => {
+    triggerAudioBeep(523, 'sine', 0.1);
+    
+    const survivors = baseballPlayers.filter((bp) => !bp.isEliminated);
+    if (survivors.length <= 1) {
+      // Baseball Completed! Map scores of players
+      setPlayers((prev) => 
+        prev.map((p) => {
+          const bp = baseballPlayers.find((b) => b.id === p.id);
+          if (bp) {
+            return {
+              ...p,
+              isEliminated: bp.isEliminated,
+              score: p.score + (bp.isEliminated ? 0 : 5)
+            };
+          }
+          return p;
+        })
+      );
+      setGamePhase('SUMMARY');
+      setShowCelebration(true);
+      return;
+    }
+
+    setBaseballRound((prev) => prev + 1);
+    setBaseballPlayers((prev) => 
+      prev.map((bp) => {
+        if (bp.isEliminated) return bp;
+        return {
+          ...bp,
+          status: 'IDLE',
+          holdTime: 0,
+          hasRippedThisRound: false
+        };
+      })
+    );
+
+    const firstSurvivorIdx = baseballPlayers.findIndex((bp) => !bp.isEliminated);
+    setBaseballPossessionIdx(firstSurvivorIdx >= 0 ? firstSurvivorIdx : 0);
+    setBaseballTimer(0.0);
+    setBaseballActiveSessionState('IDLE');
+    setBaseballLogStr(`Round ${baseballRound + 1} started! Pass the cartridge.`);
+  };
+
+  const handleInitializeBaseballGame = () => {
+    const freshList = players.map(p => ({
+      id: p.id,
+      name: p.name,
+      device: p.device,
+      status: 'IDLE' as const,
+      holdTime: 0,
+      hasRippedThisRound: false,
+      isEliminated: false,
+      oilLevel: p.oilLevel,
+      batteryLevel: p.batteryLevel ?? 1.0
+    }));
+
+    setBaseballPlayers(freshList);
+    setBaseballRound(1);
+    setBaseballPossessionIdx(0);
+    setBaseballActiveSessionState('IDLE');
+    setBaseballTimer(0.0);
+    setBaseballLogStr('Batter up! Press hold to start taking your 5s Baseball rip.');
+    setGamePhase('GAME_ON');
   };
 
 
@@ -2893,6 +3340,7 @@ export default function App() {
               playerName={leadingPlayer.name} 
               score={leadingPlayer.score} 
               onClose={() => setShowCelebration(false)} 
+              isBaseball={gameMode === 'BASEBALL'}
             />
           </motion.div>
         )}
@@ -3147,12 +3595,51 @@ export default function App() {
                 </div>
               )}
 
+              {/* GAME MODE SELECTOR */}
+              <div className="bg-[#0e0717] p-4 border-2 border-black mt-4">
+                <span className="font-mono text-[10px] text-zinc-400 block mb-2 uppercase font-bold tracking-wider">Select Arena Rulebook</span>
+                <div className="grid grid-cols-2 gap-3.5">
+                  <button
+                    onClick={() => {
+                      setGameMode('CLASSIC');
+                      playSoundModeSelect();
+                    }}
+                    className={`font-mono text-xs p-3 border-2 transition-all flex flex-col items-center gap-1.5 text-center ${
+                      gameMode === 'CLASSIC'
+                        ? 'bg-[#39ff14]/15 border-[#39ff14] text-[#39ff14] font-bold shadow-[2px_2px_0_#39ff14]'
+                        : 'bg-zinc-950/80 text-zinc-400 border-zinc-800 hover:border-zinc-700'
+                    }`}
+                  >
+                    <span className="text-sm font-bold">CLASSIC</span>
+                    <span className="text-[9px] text-zinc-500 font-sans">Draw to target duration (8s/10s)</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setGameMode('BASEBALL');
+                      playSoundModeSelect();
+                    }}
+                    className={`font-mono text-xs p-3 border-2 transition-all flex flex-col items-center gap-1.5 text-center ${
+                      gameMode === 'BASEBALL'
+                        ? 'bg-[#ffe400]/15 border-[#ffe400] text-[#ffe400] font-bold shadow-[2px_2px_0_#ffe400]'
+                        : 'bg-zinc-950/80 text-zinc-400 border-zinc-800 hover:border-zinc-700'
+                    }`}
+                  >
+                    <span className="text-sm font-bold flex items-center gap-1">BASEBALL</span>
+                    <span className="text-[9px] text-zinc-500 font-sans">5s rip, hold & pass around circle</span>
+                  </button>
+                </div>
+              </div>
+
               {players.length >= 2 ? (
                 <button
                   onClick={() => {
-                    triggerAudioBeep(620, 'square', 0.2);
-                    setDrainTimeRemaining(drainGameDuration);
-                    setGamePhase('GAME_ON');
+                    if (gameMode === 'BASEBALL') {
+                      handleInitializeBaseballGame();
+                    } else {
+                      triggerAudioBeep(620, 'square', 0.2);
+                      setDrainTimeRemaining(drainGameDuration);
+                      setGamePhase('GAME_ON');
+                    }
                   }}
                   className="w-full mt-4 bg-[#ffd700] hover:bg-[#ffdf1c] font-sans text-sm text-black font-bold p-4 border-4 border-black shadow-[6px_6px_0_#000] hover:translate-x-0.5 hover:translate-y-0.5 active:translate-y-1.5 active:translate-x-1.5 transition-all flex items-center justify-center gap-2"
                 >
@@ -3171,7 +3658,475 @@ export default function App() {
 
       {/* ACTIVE COMBAT SCENE VIEW */}
       <AnimatePresence mode="wait">
-        {gamePhase === 'GAME_ON' && (
+        {gamePhase === 'GAME_ON' && gameMode === 'BASEBALL' && (
+          <motion.div
+            key="baseball-game-screen"
+            initial={{ opacity: 0, scale: 0.98 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.98 }}
+            transition={{ duration: 0.35 }}
+            className="w-full flex flex-col gap-6 text-slate-100"
+          >
+            <div className="bg-[#110520] border-4 border-black p-4 neo-box shadow-none flex justify-between items-center flex-wrap gap-3">
+              <div className="flex items-center gap-3">
+                <div className="bg-[#ffd700] text-black font-sans font-black text-xs px-2.5 py-1 uppercase tracking-widest border border-black animate-bounce">
+                  ⚾ BASEBALL ROUND {baseballRound}
+                </div>
+                <div className="font-mono text-xs text-slate-400">
+                  Hold & Pass Arena
+                </div>
+              </div>
+              <div className="font-mono text-xs text-[#00f3ff] bg-black/60 px-3 py-1.5 border border-[#00f3ff]/30 w-full md:w-auto text-center md:text-left">
+                📢 <span className="text-white font-bold">{baseballLogStr}</span>
+              </div>
+            </div>
+
+            {/* Baseball Players Roster Bases */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 w-full">
+              {baseballPlayers.map((bp, idx) => {
+                const isPossessing = idx === baseballPossessionIdx;
+                const isElim = bp.isEliminated;
+
+                // Border and shadow dynamic classes
+                let cardBorder = 'border-[#222]';
+                let shadowColor = 'shadow-[none]';
+                
+                if (isElim) {
+                  cardBorder = 'border-red-950 opacity-40';
+                } else if (bp.status === 'RIPPING') {
+                  cardBorder = 'border-[#ff007f]';
+                  shadowColor = 'shadow-[0_0_15px_rgba(255,0,127,0.35)]';
+                } else if (bp.status === 'HOLDING') {
+                  cardBorder = 'border-[#39ff14]';
+                  shadowColor = 'shadow-[0_0_15px_rgba(57,255,20,0.25)]';
+                } else if (bp.status === 'SAFE') {
+                  cardBorder = 'border-[#00f3ff]';
+                } else if (bp.status === 'DISQUALIFIED') {
+                  cardBorder = 'border-red-600';
+                }
+
+                return (
+                  <div
+                    key={bp.id}
+                    className={`bg-[#0d0517] border-4 p-4 flex flex-col justify-between relative transition-all duration-200 select-none ${cardBorder} ${shadowColor}`}
+                  >
+                    {/* Cartridge possession crown/badge */}
+                    {isPossessing && !isElim && (
+                      <div className="absolute -top-3.5 right-4 bg-[#ffd700] text-black font-mono text-[9px] px-2.5 py-0.5 border-2 border-black font-bold uppercase tracking-wider animate-pulse flex items-center gap-1">
+                        🔌 HAS CART
+                      </div>
+                    )}
+
+                    {/* Status corner badge */}
+                    <div className="absolute -top-3.5 left-4 border-2 border-black font-mono text-[9px] px-2 py-0.5 font-bold uppercase">
+                      {isElim || bp.status === 'DISQUALIFIED' ? (
+                        <span className="bg-red-600 text-white px-1">OUT ❌</span>
+                      ) : bp.status === 'RIPPING' ? (
+                        <span className="bg-[#ff007f] text-white px-1 animate-pulse">RIPPING 🔥</span>
+                      ) : bp.status === 'HOLDING' ? (
+                        <span className="bg-[#39ff14] text-black px-1">HOLDING 🟢</span>
+                      ) : bp.status === 'SAFE' ? (
+                        <span className="bg-[#00f3ff] text-black px-1">SAFE 💨</span>
+                      ) : (
+                        <span className="bg-zinc-800 text-zinc-400 px-1">READY 💤</span>
+                      )}
+                    </div>
+
+                    {/* Player Info */}
+                    <div className="flex items-start justify-between gap-2 mt-2">
+                      <div className="flex items-center gap-2">
+                        <AvatarBadge score={isElim ? 0 : 3} status={bp.status === 'RIPPING' ? 'INHALING' : bp.status === 'HOLDING' ? 'IDLE' : bp.status === 'SAFE' ? 'SUCCESS' : 'TAPPED_OUT'} />
+                        <div className="overflow-hidden">
+                          <h4 className="font-mono text-xs text-white uppercase truncate font-bold">
+                            {bp.name}
+                          </h4>
+                          <span className="font-mono text-[9px] text-zinc-500 flex items-center gap-0.5 mt-0.5">
+                            {getDeviceIcon(bp.device, 10)} {getDeviceName(bp.device)}
+                          </span>
+                        </div>
+                      </div>
+                      <BatteryIcon level={bp.batteryLevel} />
+                    </div>
+
+                    {/* Holding seconds progress tracking */}
+                    <div className="my-3 py-1.5 border-t border-b border-zinc-900 bg-black/40 px-2 text-center text-[11px] font-mono">
+                      {bp.status === 'HOLDING' ? (
+                        <div className="text-emerald-400 flex flex-col items-center gap-0.5">
+                          <span className="font-bold text-center">HOLD TIME: {bp.holdTime}s</span>
+                          <span className="text-[8px] text-zinc-500 animate-pulse uppercase">Hold your breath!</span>
+                        </div>
+                      ) : bp.status === 'SAFE' ? (
+                        <div className="text-cyan-400 font-bold uppercase">
+                          Safe ({bp.holdTime}s held)
+                        </div>
+                      ) : bp.status === 'RIPPING' ? (
+                        <span className="text-[#ff007f] font-bold uppercase animate-pulse">DRAWING...</span>
+                      ) : isElim || bp.status === 'DISQUALIFIED' ? (
+                        <span className="text-red-500 uppercase font-bold text-[10px]">Cough/Eliminated ❌</span>
+                      ) : (
+                        <span className="text-slate-500">Normal Breath</span>
+                      )}
+                    </div>
+
+                    {/* Early Exhale Trigger button for holding non-possessing players */}
+                    {bp.status === 'HOLDING' && !isPossessing && !isElim && (
+                      <button
+                        onClick={() => handleEarlyExhaleDisqualify(idx)}
+                        className="w-full font-mono text-[9px] bg-red-950/80 hover:bg-red-800 text-red-100 py-1.5 px-2 border border-red-700 uppercase font-black tracking-wide hover:translate-y-0.5 transition-all text-center cursor-pointer"
+                      >
+                        💨 I EXHALED EARLY / COUGHED
+                      </button>
+                    )}
+                    
+                    {/* Disqualified status decoration */}
+                    {(isElim || bp.status === 'DISQUALIFIED') && (
+                      <div className="text-center font-mono text-[8px] text-red-500/80 uppercase py-1">
+                        Permanently out
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* CENTRAL CONSOLE */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 bg-[#11061c] border-4 border-black p-6 neo-box relative">
+              
+              {/* Left Column: Graphical Draw Screen */}
+              <div className="lg:col-span-4 flex flex-col justify-center items-center bg-[#07030e] border-2 border-black p-4 relative min-h-[220px] transition-transform">
+                
+                {/* Smoke Trail Animations for active draws */}
+                {baseballActiveSessionState === 'RIPPING' && (
+                  <div className="absolute inset-0 pointer-events-none z-20">
+                    <div className="absolute bottom-[20%] left-1/2 -translate-x-1/2 flex flex-col items-center">
+                      {getSmokeParticles().slice(0, 12).map((p) => (
+                        <div
+                          key={p.id}
+                          className={`absolute rounded-full ${p.bg} animate-smoke-${p.dir}`}
+                          style={{
+                            animationDelay: p.delay,
+                            width: p.size,
+                            height: p.size,
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Persistent Faint Drifting White Trail Clouds */}
+                <div className="absolute inset-0 pointer-events-none overflow-hidden z-25">
+                  {trailParticles.map((t) => (
+                    <div
+                      key={t.id}
+                      className="absolute rounded-full p-0 m-0"
+                      style={{
+                        left: `calc(50% + ${t.x}px)`,
+                        top: `${t.y}px`,
+                        width: `${t.size * 2.2}px`,
+                        height: `${t.size * 2.2}px`,
+                        background: 'radial-gradient(circle, rgba(235, 235, 240, 0.45) 0%, rgba(235, 235, 240, 0.15) 50%, rgba(235, 235, 240, 0) 100%)',
+                        opacity: t.opacity,
+                        transform: 'translate(-50%, -50%)',
+                      }}
+                    />
+                  ))}
+                </div>
+
+                {/* Vector SVG of the current player carrying the cart */}
+                {baseballPlayers[baseballPossessionIdx] && (
+                  <>
+                    {baseballPlayers[baseballPossessionIdx].device === 'cartridge' && (
+                      <CartridgeSVG 
+                        oilLevel={baseballPlayers[baseballPossessionIdx].oilLevel}
+                        isPulsing={baseballActiveSessionState === 'RIPPING'}
+                        voltage={voltage}
+                        batteryLevel={baseballPlayers[baseballPossessionIdx].batteryLevel}
+                        isCompleted={baseballActiveSessionState === 'RIP_SUCCESS'}
+                        progress={baseballTimer / 5.0}
+                      />
+                    )}
+                    {baseballPlayers[baseballPossessionIdx].device === 'disposable' && (
+                      <DisposableVapeSVG 
+                        isPulsing={baseballActiveSessionState === 'RIPPING'}
+                        oilLevel={baseballPlayers[baseballPossessionIdx].oilLevel}
+                        batteryLevel={baseballPlayers[baseballPossessionIdx].batteryLevel}
+                        voltage={voltage}
+                        isCompleted={baseballActiveSessionState === 'RIP_SUCCESS'}
+                        progress={baseballTimer / 5.0}
+                      />
+                    )}
+                    {baseballPlayers[baseballPossessionIdx].device === 'muhameds' && (
+                      <MuhaMedsSVG 
+                        isPulsing={baseballActiveSessionState === 'RIPPING'}
+                        oilLevel={baseballPlayers[baseballPossessionIdx].oilLevel}
+                        batteryLevel={baseballPlayers[baseballPossessionIdx].batteryLevel}
+                        voltage={voltage}
+                        isCompleted={baseballActiveSessionState === 'RIP_SUCCESS'}
+                        progress={baseballTimer / 5.0}
+                      />
+                    )}
+                    {baseballPlayers[baseballPossessionIdx].device === 'boutiq' && (
+                      <BoutiqSVG 
+                        isPulsing={baseballActiveSessionState === 'RIPPING'}
+                        oilLevel={baseballPlayers[baseballPossessionIdx].oilLevel}
+                        batteryLevel={baseballPlayers[baseballPossessionIdx].batteryLevel}
+                        voltage={voltage}
+                        isCompleted={baseballActiveSessionState === 'RIP_SUCCESS'}
+                        progress={baseballTimer / 5.0}
+                        playerName={baseballPlayers[baseballPossessionIdx].name}
+                        selectedTank={selectedTank}
+                        onToggleTank={handleToggleBoutiqTank}
+                        onClickButton={() => {}}
+                        customLeft={customLeftLabel}
+                        customRight={customRightLabel}
+                      />
+                    )}
+                  </>
+                )}
+
+                <div className="mt-2 text-center w-full">
+                  <span className="text-[10px] font-mono flex items-center justify-center gap-1.5 font-bold" style={{ color: getDeviceAccentColor(baseballPlayers[baseballPossessionIdx]?.device || 'cartridge') }}>
+                    {getDeviceIcon(baseballPlayers[baseballPossessionIdx]?.device || 'cartridge', 12)}
+                    <span>{baseballPlayers[baseballPossessionIdx] ? getDeviceName(baseballPlayers[baseballPossessionIdx].device) : 'Cartridge'}</span>
+                  </span>
+                </div>
+              </div>
+
+              {/* Right Column: Console Control Screen & Action buttons */}
+              <div className="lg:col-span-8 flex flex-col justify-between gap-4">
+                
+                {/* Active holding / turn banner */}
+                <div className="border-b border-zinc-800 pb-3">
+                  <span className="font-mono text-[10px] text-slate-400 block mb-1">POSSESSION OF CARTRIDGE</span>
+                  <div className="flex justify-between items-center">
+                    <h3 className="font-sans text-xl font-bold text-[#ffd700] uppercase tracking-tight flex items-center gap-2">
+                       {baseballPlayers[baseballPossessionIdx]?.name || 'Player'}
+                    </h3>
+                    <div className="font-mono text-xs bg-[#00f3ff]/10 border border-[#00f3ff]/30 text-[#00f3ff] px-2 py-0.5 font-bold">
+                      {baseballPlayers.length > 0 && baseballPlayers.filter(bp => !bp.isEliminated).every(bp => bp.hasRippedThisRound) ? 'EXHALATION TURN 💨' : 'RIP TURN 💨'}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Display different prompts based on baseball state */}
+                <div className="bg-[#080310] border-2 border-black p-4 flex-1 flex flex-col justify-center min-h-[120px]">
+                  {baseballActiveSessionState === 'ROUND_FAILED_POPUP' ? (
+                    <div className="text-center">
+                      <span className="text-red-500 font-extrabold text-sm uppercase block tracking-widest mb-1.5">❌ PLAYER OUT</span>
+                      <p className="font-mono text-xs text-white max-w-sm mx-auto">
+                        <strong>{baseballFailedPlayerName}</strong> exhaled early or coughed! They have been disqualified from the Baseball circular ring.
+                      </p>
+                      <p className="font-mono text-[10px] text-zinc-500 mt-2">
+                        Click below to terminate this round and proceed survivors.
+                      </p>
+                    </div>
+                  ) : (baseballPlayers.length > 0 && baseballPlayers.filter(bp => !bp.isEliminated).every(bp => bp.hasRippedThisRound)) ? (
+                    // EXHALING TURN
+                    <div className="text-center">
+                      {baseballPlayers[baseballPossessionIdx]?.status === 'SAFE' ? (
+                        <div>
+                          <p className="text-[#39ff14] font-bold text-xs uppercase flex items-center justify-center gap-1.5 mb-1">
+                            ✅ SAFE EXHALATION COMPLETED!
+                          </p>
+                          <p className="font-mono text-[11px] text-zinc-400">
+                            Excellent! Pass the cartridge to the next survivor so they are cleared to exhale as well.
+                          </p>
+                        </div>
+                      ) : (
+                        <div>
+                          <p className="font-sans text-xs text-[#00f3ff] font-bold uppercase tracking-wider mb-1">
+                            Cleared to Exhale!
+                          </p>
+                          <p className="font-mono text-[11px] text-slate-300 max-w-sm mx-auto">
+                            The cartridge is in your hand. You are safely allowed to EXHALE now! Click the action button below to declare.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    // RIP TURN
+                    <div className="text-center">
+                      {baseballActiveSessionState === 'RIP_SUCCESS' ? (
+                        <div>
+                          <p className="text-[#39ff14] font-bold text-xs uppercase mb-1">
+                            🔥 SUCCESSFUL DRAW!
+                          </p>
+                          <p className="font-mono text-[11px] text-slate-300">
+                            You took a 5-second pull. Keep holding your breath in real life, and pass the cartridge to the next player!
+                          </p>
+                        </div>
+                      ) : baseballActiveSessionState === 'RIPPING' ? (
+                        <div className="flex flex-col items-center">
+                          <span className="text-[#ff007f] font-mono text-[10px] uppercase font-bold animate-pulse tracking-widest mb-2">
+                            DRAWING VAPOR (5.0s TARGET)
+                          </span>
+                          
+                          {/* Sled Timer visualizer */}
+                          <div className="text-4xl font-mono font-black text-white px-6 py-2.5 bg-black/60 border-2 border-black rounded shadow-[3px_3px_0_#ff007f]">
+                            {baseballTimer.toFixed(1)}s
+                          </div>
+
+                          {/* Progress bar */}
+                          <div className="w-full max-w-[240px] bg-zinc-950 h-3 border border-zinc-800 p-0.5 mt-3">
+                            <div 
+                              className="h-full bg-gradient-to-r from-[#ff007f] to-[#ff75c3] transition-all duration-75"
+                              style={{ width: `${(baseballTimer / 5.0) * 100}%` }}
+                            />
+                          </div>
+                        </div>
+                      ) : (
+                        <div>
+                          <p className="font-sans text-xs text-[#39ff14] font-bold uppercase tracking-wide mb-1">
+                            Your turn to Rip!
+                          </p>
+                          <p className="font-mono text-[11px] text-slate-300 max-w-sm mx-auto">
+                            Take a full 5.0-second draw. You are strictly FORBIDDEN from exhaling after this! Keep it held until the cart rounds the circle.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Console Action Panel (Execution button deck) */}
+                <div>
+                  {baseballActiveSessionState === 'ROUND_FAILED_POPUP' ? (
+                    <button
+                      onClick={startNextBaseballRound}
+                      className="w-full bg-red-650 hover:bg-red-500 font-sans text-xs text-white font-bold p-4 border-4 border-black shadow-[4px_4px_0_#000] active:translate-y-0.5 cursor-pointer text-center uppercase"
+                    >
+                      ADVANCE TO NEXT ROUND (WITHOUT {baseballFailedPlayerName}) 👉
+                    </button>
+                  ) : (baseballPlayers.length > 0 && baseballPlayers.filter(bp => !bp.isEliminated).every(bp => bp.hasRippedThisRound)) ? (
+                    // EXHALATION RETAIN ACTIONS
+                    <div className="flex flex-col gap-3">
+                      {baseballPlayers[baseballPossessionIdx]?.status === 'SAFE' ? (
+                        // If current player already exhaled, show standard pass button
+                        <div>
+                          {baseballPlayers.filter(bp => !bp.isEliminated && bp.status === 'HOLDING').length > 0 ? (
+                            <button
+                              onClick={() => {
+                                playSoundUiClick();
+                                const nextIdx = getNextBaseballSurvivorIdx(baseballPossessionIdx);
+                                setBaseballPossessionIdx(nextIdx);
+                                setBaseballTimer(0);
+                                setBaseballActiveSessionState('IDLE');
+                                setBaseballLogStr(`Pass the cartridge to ${baseballPlayers[nextIdx].name} to exhale.`);
+                              }}
+                              className="w-full bg-[#00f3ff] hover:bg-cyan-450 font-sans text-xs text-black font-bold p-4 border-4 border-black shadow-[4px_4px_0_#000] active:translate-y-0.5 uppercase tracking-wider cursor-pointer"
+                            >
+                              PASS CARTRIDGE TO {baseballPlayers[getNextBaseballSurvivorIdx(baseballPossessionIdx)]?.name} 👉
+                            </button>
+                          ) : (
+                            // All players safe!
+                            <button
+                              onClick={startNextBaseballRound}
+                              className="w-full bg-[#39ff14] hover:bg-emerald-400 font-sans text-xs text-black font-bold p-4 border-4 border-black shadow-[5px_5px_0_#000] hover:translate-x-0.5 hover:translate-y-0.5 active:translate-y-1 transition-all uppercase tracking-wider cursor-pointer"
+                            >
+                              🎉 CLEAR ROUND {baseballRound} & START ROUND {baseballRound + 1}!
+                            </button>
+                          )}
+                        </div>
+                      ) : (
+                        // Needs to exhale
+                        <button
+                          onClick={() => {
+                            playSoundUiClick();
+                            triggerAudioBeep(659, 'triangle', 0.1);
+                            setTimeout(() => triggerAudioBeep(784, 'sine', 0.15), 50);
+                            handleSpawnConfettiCloud();
+                            setBaseballPlayers(prev => prev.map((bp, idx) => idx === baseballPossessionIdx ? { ...bp, status: 'SAFE' } : bp));
+                            setBaseballLogStr(`${baseballPlayers[baseballPossessionIdx]?.name} exhaled!`);
+                          }}
+                          className="w-full bg-gradient-to-r from-[#00f3ff] to-[#39ff14] text-black font-sans text-sm font-bold p-4 border-4 border-black shadow-[4px_4px_0_#000] active:translate-y-1 transition-all uppercase tracking-widest text-center cursor-pointer"
+                        >
+                          💨 EXHALE
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    // INHALATION ACTIONS
+                    <div>
+                      {baseballActiveSessionState === 'RIP_SUCCESS' ? (
+                        <button
+                          onClick={() => {
+                            playSoundUiClick();
+                            const nextIdx = getNextBaseballSurvivorIdx(baseballPossessionIdx);
+                            setBaseballPossessionIdx(nextIdx);
+                            setBaseballTimer(0);
+                            setBaseballActiveSessionState('IDLE');
+                            
+                            // Check if next is already holding. If yes, it's exhale time!
+                            const survivors = baseballPlayers.filter(bp => !bp.isEliminated);
+                            const allHoldingOrSafe = survivors.every(bp => bp.hasRippedThisRound || bp.id === baseballPlayers[nextIdx].id);
+                            if (allHoldingOrSafe) {
+                              setBaseballLogStr(`Circle pass completed! Return the cart back to ${baseballPlayers[nextIdx].name} for exhalation!`);
+                            } else {
+                              setBaseballLogStr(`Cartridge passed to ${baseballPlayers[nextIdx].name}. Take your 5s rip!`);
+                            }
+                          }}
+                          className="w-full bg-[#39ff14] hover:bg-emerald-450 font-sans text-xs text-black font-bold p-4 border-4 border-black shadow-[4px_4px_0_#000] active:translate-y-0.5 uppercase cursor-pointer"
+                        >
+                          PASS CARTRIDGE TO {baseballPlayers[getNextBaseballSurvivorIdx(baseballPossessionIdx)]?.name} 👉
+                        </button>
+                      ) : (
+                        <div className="grid grid-cols-2 gap-4">
+                          <button
+                            onClick={() => {
+                              if (baseballActiveSessionState === 'RIPPING') {
+                                haltBaseballRip();
+                              } else {
+                                startBaseballRip();
+                              }
+                            }}
+                            className={`font-mono text-xs p-3.5 border-4 border-black font-bold uppercase transition-all cursor-pointer ${
+                              baseballActiveSessionState === 'RIPPING'
+                                ? 'bg-red-600 text-white animate-pulse'
+                                : 'bg-[#eab308] hover:bg-yellow-400 text-black shadow-[3px_3px_0_#000]'
+                            }`}
+                          >
+                            {baseballActiveSessionState === 'RIPPING' 
+                              ? 'TAP TO STOP 💨' 
+                              : 'TAP TO RIP (5s) 💨'}
+                          </button>
+
+                          <button
+                            onClick={concludeBaseballRipFail}
+                            disabled={baseballActiveSessionState !== 'RIPPING'}
+                            className={`font-mono text-xs p-3.5 border-4 border-black font-bold uppercase transition-all cursor-pointer ${
+                              baseballActiveSessionState === 'RIPPING'
+                                ? 'bg-red-950/80 hover:bg-red-800 text-red-200 animate-pulse'
+                                : 'bg-zinc-950 text-slate-600 border-zinc-800'
+                            }`}
+                          >
+                            TAP OUT / GASP
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+              </div>
+
+            </div>
+
+            {/* Quick Action Navigation Deck */}
+            <div className="flex justify-between items-center bg-[#11061c] border-4 border-black p-4 neo-box shadow-none">
+              <span className="font-mono text-[10px] text-zinc-500 uppercase">Passed cartridge must cycle fully around remaining players list!</span>
+              <button
+                onClick={triggerReset}
+                className="font-mono text-[10px] p-2 bg-red-950/80 hover:bg-red-800 text-red-100 border-2 border-black font-bold uppercase cursor-pointer transition-colors"
+              >
+                Quit Game (Reset)
+              </button>
+            </div>
+
+          </motion.div>
+        )}
+
+        {gamePhase === 'GAME_ON' && gameMode !== 'BASEBALL' && (
           <motion.div
             key="game-screen"
             initial={{ opacity: 0, scale: 0.98 }}
