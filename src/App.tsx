@@ -2091,24 +2091,20 @@ export default function App() {
       const delay = delayVal.toFixed(2);
       let baseSize = 14;
       if (voltage <= 2.4) {
-        baseSize = 12 + (i % 4) * 5;
+        baseSize = 12 + (i % 4) * 4;
       } else if (voltage >= 4.0) {
-        baseSize = 28 + (i % 6) * 10;
+        baseSize = 24 + (i % 6) * 8;
       } else {
-        baseSize = 18 + (i % 4) * 7;
+        baseSize = 16 + (i % 4) * 6;
       }
       const blur = i % 4 === 0 ? 'blur-md' : i % 4 === 1 ? 'blur-lg' : i % 4 === 2 ? 'blur-sm' : 'blur-xl';
       const bgClasses = [
-        'bg-white/30',
-        'bg-slate-200/30',
-        'bg-[#00f3ff]/15 shadow-[0_0_12px_rgba(0,243,255,0.25)]',
-        'bg-white/40',
-        'bg-[#ff007f]/15 shadow-[0_0_12px_rgba(255,0,127,0.25)]',
-        'bg-zinc-100/35',
-        'bg-[#39ff14]/15 shadow-[0_0_12px_rgba(57,255,20,0.25)]',
-        'bg-[#d946ef]/15 shadow-[0_0_12px_rgba(217,70,239,0.25)]',
-        'bg-white/25',
-        'bg-slate-300/40'
+        'bg-white/20 shadow-[0_0_8px_rgba(255,255,255,0.15)]',
+        'bg-slate-200/25 shadow-[0_0_8px_rgba(240,240,245,0.1)]',
+        'bg-zinc-100/30 shadow-[0_0_10px_rgba(255,255,255,0.2)]',
+        'bg-white/30 shadow-[0_0_12px_rgba(255,255,255,0.25)]',
+        'bg-slate-100/20 shadow-[0_0_8px_rgba(235,235,240,0.12)]',
+        'bg-white/25 shadow-[0_0_10px_rgba(255,255,255,0.2)]'
       ];
       const bg = bgClasses[i % bgClasses.length];
       
@@ -2124,14 +2120,13 @@ export default function App() {
 
       // Trailing Ghost Particle - slightly offset (inherits path & opacity slightly faded)
       const ghostDelay = (delayVal + 0.16).toFixed(2);
-      const ghostSize = Math.max(10, Math.round(baseSize * 0.85));
+      const ghostSize = Math.max(8, Math.round(baseSize * 0.8));
       const ghostBg = bg
-        .replace('/40', '/15')
-        .replace('/35', '/12')
         .replace('/30', '/10')
         .replace('/25', '/8')
-        .replace('/15', '/5')
-        .replace('0.25', '0.08');
+        .replace('/20', '/6')
+        .replace('0.25', '0.08')
+        .replace('0.2', '0.06');
 
       list.push({
         id: `smoke-ghost-${i}`,
@@ -2181,18 +2176,17 @@ export default function App() {
     return () => clearInterval(interval);
   }, [particles]);
 
-  // Persistent drifting neon cloud trail physics and generator
+  // Persistent drifting trail physics and generator
   useEffect(() => {
     let animationFrame: number;
     let lastSpawnTime = 0;
-    const spawnInterval = 90; // Spawn interval in ms for new draft puffs
+    const spawnInterval = 320; // Spawn less frequently for massive performance gains
 
     const colors = [
-      'rgba(0, 243, 255, 0.22)',  // Neon cyan
-      'rgba(217, 70, 239, 0.22)', // Neon purple
-      'rgba(57, 255, 20, 0.18)',   // Neon green
-      'rgba(255, 0, 127, 0.22)',  // Neon hot pink
-      'rgba(255, 255, 255, 0.25)', // Smooth ambient white
+      'rgba(255, 255, 255, 0.20)', // Clean ambient white smoke
+      'rgba(240, 240, 250, 0.16)', // Soft slate white
+      'rgba(245, 245, 245, 0.22)', // Pure light cloud white
+      'rgba(255, 255, 255, 0.12)', // Subtle thin white smoke
     ];
 
     const updatePhysics = (timestamp: number) => {
@@ -2202,23 +2196,22 @@ export default function App() {
         if (timestamp - lastSpawnTime > spawnInterval) {
           lastSpawnTime = timestamp;
 
-          const activeDeviceAccent = getDeviceAccentColor(activePlayer.device);
-          // Insert neon cloud vapor particle with expanding behavior
-          const newTrails: TrailParticle[] = Array.from({ length: 2 }).map((_, idx) => {
-            const size = 14 + Math.random() * 8;
+          // Insert clean white cloud vapor particle with expanding behavior
+          const newTrails: TrailParticle[] = Array.from({ length: 1 }).map((_, idx) => {
+            const size = 12 + Math.random() * 6;
             return {
               id: Math.random() + Date.now() + idx,
-              x: (Math.random() - 0.5) * 12,
-              y: 40 + (Math.random() - 0.5) * 6,
-              vx: (Math.random() - 0.5) * 0.7,
-              vy: -1.0 - Math.random() * 1.2,
+              x: (Math.random() - 0.5) * 8,
+              y: 35 + (Math.random() - 0.5) * 4,
+              vx: (Math.random() - 0.5) * 0.5,
+              vy: -0.8 - Math.random() * 0.8,
               size: size,
-              maxSize: size * (3.0 + Math.random() * 2.0),
-              opacity: 0.4 + Math.random() * 0.15,
-              color: activeDeviceAccent || colors[Math.floor(Math.random() * colors.length)],
+              maxSize: size * (2.2 + Math.random() * 1.5),
+              opacity: 0.35 + Math.random() * 0.1,
+              color: colors[Math.floor(Math.random() * colors.length)],
               blur: Math.random() > 0.4 ? 'blur-md' : 'blur-lg',
-              life: 2400 + Math.random() * 800,
-              maxLife: 2400 + Math.random() * 800,
+              life: 1100 + Math.random() * 300, // Reduced decay time for 10x quicker garbage collection
+              maxLife: 1100 + Math.random() * 300,
             };
           });
 
@@ -2240,14 +2233,14 @@ export default function App() {
             const nextSize = p.size + (p.maxSize - p.size) * (1 - ratio) * 0.03;
             const nextX = p.x + p.vx;
             const nextY = p.y + p.vy;
-            const nextOpacity = ratio * ratio * 0.45; // Smooth exponential curve for fading out
+            const nextOpacity = ratio * ratio * 0.4; // Smooth exponential curve for fading out
 
             return {
               ...p,
               x: nextX,
               y: nextY,
-              vx: p.vx * 0.97, // Drag
-              vy: p.vy * 0.98,
+              vx: p.vx * 0.95, // Drag
+              vy: p.vy * 0.96,
               size: nextSize,
               opacity: nextOpacity,
               life: nextLife,
@@ -2261,7 +2254,7 @@ export default function App() {
 
     animationFrame = requestAnimationFrame(updatePhysics);
     return () => cancelAnimationFrame(animationFrame);
-  }, [activeSessionState, activePlayer.device]);
+  }, [activeSessionState]);
 
   const targetTime = blinkMode === 'TAKE_BLINKER' ? 8 : 10;
   const progressRatio = inhaleTimer / targetTime;
@@ -3346,7 +3339,7 @@ export default function App() {
                   </div>
                 )}
 
-                {/* Persistent Faint Drifting Neon Trail Clouds */}
+                {/* Persistent Faint Drifting White Trail Clouds */}
                 <div className="absolute inset-0 pointer-events-none overflow-hidden z-25">
                   {trailParticles.map((t) => (
                     <div
@@ -3360,8 +3353,7 @@ export default function App() {
                         backgroundColor: t.color,
                         opacity: t.opacity,
                         transform: 'translate(-50%, -50%)',
-                        boxShadow: `0 0 ${t.size / 2}px ${t.color}`,
-                        transition: 'opacity 0.2s ease-out, width 0.2s ease-out, height 0.2s ease-out',
+                        boxShadow: `0 0 ${t.size / 2}px rgba(255, 255, 255, 0.4)`,
                       }}
                     />
                   ))}
